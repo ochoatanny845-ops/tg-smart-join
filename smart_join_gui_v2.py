@@ -1476,6 +1476,12 @@ class SmartJoinGUI:
             
             # 加入群
             result = await self.join_group(session_name, link)
+            
+            # 检查账号是否死了（未授权）
+            if result == 'UNAUTHORIZED':
+                self.log(f"❌ [{session_name}] 账号未授权，停止该账号的加群任务", "ERROR")
+                break  # 停止循环，不再尝试后续群
+            
             if result:
                 success += 1
                 # 重新加载joined.json（可能被其他账号更新了）
@@ -1509,8 +1515,13 @@ class SmartJoinGUI:
             await client.connect()
             
             if not await client.is_user_authorized():
-                self.log(f"❌ [{session_name}] 未授权", "ERROR")
-                return False
+                self.log(f"❌ [{session_name}] 未授权（死号），停止使用该账号", "ERROR")
+                # 标记账号为未授权状态
+                account = next((acc for acc in self.accounts if acc.session_name == session_name), None)
+                if account:
+                    account.is_authorized = False
+                    account.status = '❌ 未授权'
+                return 'UNAUTHORIZED'  # 返回特殊值，通知worker停止
             
             # 解析链接
             parsed = GroupLinkParser.parse_link(link)
