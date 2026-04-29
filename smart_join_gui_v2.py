@@ -766,7 +766,6 @@ class SmartJoinGUI:
         try:
             import sqlite3
             import base64
-            import struct
             
             # Session文件路径
             session_path = os.path.join(Config.SESSIONS_DIR, session_name + '.session')
@@ -795,85 +794,151 @@ class SmartJoinGUI:
             
             conn.close()
             
-            # 构造认证数据（参考Chrome扩展格式）
-            auth_data = {
-                "dc": dc_id,
-                "auth_key": f'"{auth_key}"',  # 用引号包裹
-                "server_salt": '""',  # 空值也用引号
-                "user_auth": {}
-            }
-            
-            # 生成JavaScript注入代码
-            js_code = f"""
-            localStorage.setItem('dc', '{dc_id}');
-            localStorage.setItem('dc{dc_id}_auth_key', '"{auth_key}"');
-            localStorage.setItem('dc{dc_id}_server_salt', '""');
-            localStorage.setItem('user_auth', '{{"dcID":{dc_id},"id":0}}');
-            console.log('✅ Telegram认证数据已注入');
-            """
-            
-            # 打开浏览器并注入数据
-            import webbrowser
-            import tempfile
-            
-            # 创建临时HTML文件（包含自动注入和跳转）
-            html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Telegram Web Login</title>
-</head>
-<body>
-    <h2>正在登录Telegram Web版...</h2>
-    <p>请稍候...</p>
-    <script>
-    {js_code}
-    // 注入后跳转到Telegram Web
-    setTimeout(() => {{
-        window.location.href = 'https://web.telegram.org/a/';
-    }}, 500);
-    </script>
-</body>
-</html>"""
-            
-            # 保存临时文件
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
-                f.write(html_content)
-                temp_file = f.name
-            
-            # 使用Chrome无痕模式打开
-            import subprocess
-            chrome_paths = [
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                os.path.expanduser(r"~\AppData\Local\Google\Chrome\Application\chrome.exe")
-            ]
-            
-            chrome_exe = None
-            for path in chrome_paths:
-                if os.path.exists(path):
-                    chrome_exe = path
-                    break
-            
-            if chrome_exe:
-                # 使用Chrome无痕模式
-                subprocess.Popen([
-                    chrome_exe,
-                    '--incognito',
-                    f'file:///{temp_file.replace(chr(92), "/")}'
-                ])
-                self.log(f"✅ {session_name} - 已在Chrome无痕模式中打开", "SUCCESS")
-            else:
-                # 找不到Chrome，使用默认浏览器
-                webbrowser.open(f'file:///{temp_file.replace(chr(92), "/")}')
-                self.log(f"✅ {session_name} - 已在默认浏览器中打开", "SUCCESS")
-            
-            self.log(f"ℹ️  使用无痕模式，不会影响你的Google账号", "INFO")
+            # 尝试使用Selenium自动化
+            try:
+                from selenium import webdriver
+                from selenium.webdriver.chrome.options import Options
+                from selenium.webdriver.chrome.service import Service
+                import time
+                
+                # Chrome选项
+                chrome_options = Options()
+                chrome_options.add_argument('--incognito')  # 无痕模式
+                chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+                
+                # 启动Chrome
+                self.log(f"🚀 启动Chrome无痕模式...", "INFO")
+                driver = webdriver.Chrome(options=chrome_options)
+                
+                # 打开Telegram Web（A版）
+                driver.get('https://web.telegram.org/a/')
+                self.log(f"⏳ 等待页面加载...", "INFO")
+                time.sleep(2)
+                
+                # 注入localStorage
+                self.log(f"💉 注入认证数据...", "INFO")
+                driver.execute_script(f"""
+                    localStorage.setItem('dc', '{dc_id}');
+                    localStorage.setItem('dc{dc_id}_auth_key', '"{auth_key}"');
+                    localStorage.setItem('dc{dc_id}_server_salt', '""');
+                    localStorage.setItem('user_auth', '{{"dcID":{dc_id},"id":0}}');
+                    console.log('✅ Telegram认证数据已注入');
+                """)
+                
+                # 刷新页面
+                self.log(f"🔄 刷新页面...", "INFO")
+                driver.refresh()
+                time.sleep(1)
+                
+                self.log(f"✅ {session_name} - Telegram Web已打开（无痕模式）", "SUCCESS")
+                self.log(f"ℹ️  如果仍未自动登录，请检查session是否有效", "INFO")
+                
+            except ImportError:
+                # Selenium未安装，降级到浏览器方案
+                self.log(f"⚠️  未安装Selenium，使用浏览器方案（可能需要手动操作）", "WARNING")
+                self._login_web_fallback(session_name, dc_id, auth_key)
+                
+            except Exception as selenium_error:
+                # Selenium出错，降级方案
+                self.log(f"⚠️  Selenium出错: {selenium_error}", "WARNING")
+                self._login_web_fallback(session_name, dc_id, auth_key)
             
         except Exception as e:
             self.log(f"❌ Web登录失败: {e}", "ERROR")
             import traceback
             traceback.print_exc()
+    
+    def _login_web_fallback(self, session_name: str, dc_id: int, auth_key: str):
+        """降级方案：打开浏览器并显示提示"""
+        import subprocess
+        import tempfile
+        
+        # 生成说明页面
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Telegram Web 手动登录</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }}
+        h2 {{ color: #0088cc; }}
+        code {{ background: #f0f0f0; padding: 2px 6px; border-radius: 3px; }}
+        pre {{ background: #f0f0f0; padding: 10px; border-radius: 5px; overflow-x: auto; }}
+        .step {{ margin: 15px 0; padding: 10px; background: #e8f4f8; border-left: 4px solid #0088cc; }}
+        button {{ background: #0088cc; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }}
+        button:hover {{ background: #006699; }}
+    </style>
+</head>
+<body>
+    <h2>🌐 Telegram Web 手动登录</h2>
+    <p>由于未安装Selenium，需要手动执行以下步骤：</p>
+    
+    <div class="step">
+        <strong>步骤1:</strong> 点击下方按钮打开Telegram Web
+        <br><button onclick="window.open('https://web.telegram.org/a/', '_blank')">打开 Telegram Web</button>
+    </div>
+    
+    <div class="step">
+        <strong>步骤2:</strong> 按 <code>F12</code> 打开开发者工具
+    </div>
+    
+    <div class="step">
+        <strong>步骤3:</strong> 切换到 <code>Console</code> 标签页
+    </div>
+    
+    <div class="step">
+        <strong>步骤4:</strong> 复制粘贴以下代码并按回车：
+        <pre id="code">localStorage.setItem('dc', '{dc_id}');
+localStorage.setItem('dc{dc_id}_auth_key', '"{auth_key}"');
+localStorage.setItem('dc{dc_id}_server_salt', '""');
+localStorage.setItem('user_auth', '{{"dcID":{dc_id},"id":0}}');
+console.log('✅ 认证数据已注入');
+location.reload();</pre>
+        <button onclick="copyCode()">📋 复制代码</button>
+    </div>
+    
+    <div class="step">
+        <strong>步骤5:</strong> 页面会自动刷新并登录
+    </div>
+    
+    <script>
+    function copyCode() {{
+        const code = document.getElementById('code').textContent;
+        navigator.clipboard.writeText(code).then(() => {{
+            alert('✅ 代码已复制到剪贴板！');
+        }});
+    }}
+    </script>
+</body>
+</html>"""
+        
+        # 保存临时文件
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
+            f.write(html_content)
+            temp_file = f.name
+        
+        # 查找Chrome
+        chrome_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            os.path.expanduser(r"~\AppData\Local\Google\Chrome\Application\chrome.exe")
+        ]
+        
+        chrome_exe = None
+        for path in chrome_paths:
+            if os.path.exists(path):
+                chrome_exe = path
+                break
+        
+        if chrome_exe:
+            subprocess.Popen([chrome_exe, '--incognito', f'file:///{temp_file.replace(chr(92), "/")}'])
+            self.log(f"✅ {session_name} - 已在Chrome无痕模式中打开说明页面", "SUCCESS")
+        else:
+            import webbrowser
+            webbrowser.open(f'file:///{temp_file.replace(chr(92), "/")}')
+            self.log(f"✅ {session_name} - 已在默认浏览器中打开说明页面", "SUCCESS")
+        
+        self.log(f"ℹ️  请按照页面说明手动完成登录", "INFO")
     
     def select_all_accounts(self):
         """全选"""
