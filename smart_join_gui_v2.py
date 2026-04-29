@@ -133,6 +133,7 @@ class AccountInfo:
         if not os.path.exists(session_path + '.session'):
             self.status = '❌ 文件不存在'
             self.is_authorized = False
+            print(f"[DEBUG] Session文件不存在: {session_path}.session")
             return
         
         client = TelegramClient(session_path, Config.API_ID, Config.API_HASH)
@@ -146,9 +147,11 @@ class AccountInfo:
                 self.name = me.first_name or '未知'
                 self.status = '✅ 正常'
                 self.is_authorized = True
+                print(f"[DEBUG] {self.session_name}: 授权成功 - {self.phone} ({self.name})")
             else:
                 self.status = '❌ 未授权'
                 self.is_authorized = False
+                print(f"[DEBUG] {self.session_name}: 未授权")
             
             # 加载已加入群数
             self.joined_count = DataManager.get_joined_count(self.session_name)
@@ -156,6 +159,7 @@ class AccountInfo:
         except Exception as e:
             self.status = f'❌ 错误: {e}'
             self.is_authorized = False
+            print(f"[DEBUG] {self.session_name}: 错误 - {e}")
         
         finally:
             await client.disconnect()
@@ -598,6 +602,7 @@ class SmartJoinGUI:
         total = len(self.accounts)
         authorized = 0
         unauthorized = 0
+        updated = 0
         
         # 更新表格
         for item in self.account_tree.get_children():
@@ -605,6 +610,7 @@ class SmartJoinGUI:
             account = next((acc for acc in self.accounts if acc.session_name == session_name), None)
             
             if account:
+                updated += 1
                 values = list(self.account_tree.item(item)['values'])
                 values[2] = account.phone      # 手机号
                 values[3] = account.name       # 名字
@@ -617,9 +623,12 @@ class SmartJoinGUI:
                     authorized += 1
                 else:
                     unauthorized += 1
+            else:
+                self.log(f"⚠️  未找到账号: {session_name}", "WARNING")
         
         # 更新统计
         self.update_stats()
+        self.log(f"📊 更新了 {updated} 个账号的界面", "INFO")
         self.log(f"✅ 检查完成！正常: {authorized}, 失效: {unauthorized}, 总计: {total}", "SUCCESS")
     
     def toggle_account_selection(self, event):
