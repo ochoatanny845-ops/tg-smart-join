@@ -205,8 +205,11 @@ class AccountInfo:
                     # 方法1: 尝试发送消息到"Saved Messages"（最准确！）
                     # 冻结账号无法发送任何消息，包括给自己
                     try:
-                        # 发送一条测试消息到收藏夹
-                        msg = await client.send_message('me', '.')
+                        # 发送当前时间到收藏夹（便于确认测试）
+                        import time
+                        from datetime import datetime
+                        test_msg = f"[测试] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        msg = await client.send_message('me', test_msg)
                         # 立即删除
                         await client.delete_messages('me', msg.id)
                         # 成功 → 账号正常
