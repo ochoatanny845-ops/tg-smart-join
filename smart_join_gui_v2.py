@@ -615,6 +615,7 @@ class SmartJoinGUI:
         """运行加群任务"""
         self.log("=" * 60, "INFO")
         self.log(f"🚀 开始加群！使用 {len(self.selected_accounts)} 个账号", "INFO")
+        self.log(f"🔍 调试: selected_accounts = {self.selected_accounts}", "INFO")
         self.log("=" * 60, "INFO")
         
         # 加载群列表
@@ -677,6 +678,11 @@ class SmartJoinGUI:
     
     async def join_group(self, session_name: str, link: str) -> bool:
         """单个账号加入群"""
+        # 类型检查
+        if not isinstance(session_name, str):
+            self.log(f"❌ 错误: session_name类型错误 ({type(session_name)}): {session_name}", "ERROR")
+            return False
+        
         session_path = os.path.join(Config.SESSIONS_DIR, session_name)
         client = TelegramClient(session_path, Config.API_ID, Config.API_HASH)
         
