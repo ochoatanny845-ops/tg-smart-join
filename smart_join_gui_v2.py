@@ -1,12 +1,22 @@
 #!/usr/bin/env python3
 """
-Telegram 智能加群工具 - 改进版GUI
+Telegram 智能加群工具 - 改进版GUI v2.2.0
 功能：
 1. 显示账号列表（手机号、名字、状态、统计）
 2. 多账号选择加群
 3. 放大字体
 4. 实时统计
+5. 群发消息功能（支持账号选择、加载所有群组）
+
+更新日志 v2.2.0:
+- 修复群发标签页账号选择问题
+- 修复只能加载部分群组的BUG
+- 修复加载群组卡住问题
+- 添加详细进度日志和错误提示
+- 优化用户操作流程
 """
+
+VERSION = "v2.2.0"
 
 import asyncio
 import re
@@ -363,7 +373,7 @@ class AccountInfo:
 class SmartJoinGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Telegram 智能加群工具 v2.0 - 改进版")
+        self.root.title(f"Telegram 智能加群工具 {VERSION} - 群发修复版")
         self.root.geometry("1000x700")
         
         # 放大字体
