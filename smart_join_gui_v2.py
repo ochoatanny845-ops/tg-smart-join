@@ -1800,9 +1800,18 @@ class SmartJoinGUI:
     
     def setup_broadcast_tab(self, parent):
         """群发消息标签页"""
-        # 创建可滚动的Canvas
-        canvas = Canvas(parent)
-        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        # 创建左右分栏布局
+        main_container = Frame(parent)
+        main_container.pack(fill=BOTH, expand=True)
+        
+        # 左侧：配置区（40%）
+        left_frame = Frame(main_container)
+        left_frame.pack(side=LEFT, fill=BOTH, expand=False, padx=5, pady=5)
+        left_frame.config(width=400)
+        
+        # 左侧滚动区域
+        canvas = Canvas(left_frame, width=400)
+        scrollbar = ttk.Scrollbar(left_frame, orient="vertical", command=canvas.yview)
         scrollable_frame = Frame(canvas)
         
         scrollable_frame.bind(
@@ -1821,8 +1830,30 @@ class SmartJoinGUI:
             canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
         
-        # 使用scrollable_frame作为父容器
+        # 使用scrollable_frame作为左侧父容器
         parent_container = scrollable_frame
+        
+        # 右侧：运行日志（60%）
+        right_frame = LabelFrame(main_container, text="📋 运行日志", 
+                                font=self.font_menu, padx=10, pady=10)
+        right_frame.pack(side=RIGHT, fill=BOTH, expand=True, padx=5, pady=5)
+        
+        # 日志文本框（独立的，专用于群发）
+        self.broadcast_log_text = Text(right_frame, height=30, width=60, 
+                                      font=self.font_log, wrap=WORD, bg='#1E1E1E', fg='white')
+        self.broadcast_log_text.pack(side=LEFT, fill=BOTH, expand=True)
+        
+        # 日志滚动条
+        log_scrollbar = ttk.Scrollbar(right_frame, orient=VERTICAL, 
+                                     command=self.broadcast_log_text.yview)
+        self.broadcast_log_text.configure(yscrollcommand=log_scrollbar.set)
+        log_scrollbar.pack(side=RIGHT, fill=Y)
+        
+        # 配置日志颜色标签
+        self.broadcast_log_text.tag_config('INFO', foreground='white')
+        self.broadcast_log_text.tag_config('SUCCESS', foreground='#4CAF50')
+        self.broadcast_log_text.tag_config('WARNING', foreground='#FF9800')
+        self.broadcast_log_text.tag_config('ERROR', foreground='#F44336')
         
         # 消息内容区
         content_frame = LabelFrame(parent_container, text="📝 消息内容", 
@@ -2324,9 +2355,9 @@ class SmartJoinGUI:
     
     async def load_joined_groups(self):
         """加载已加入的群组"""
-        self.log("=" * 60, "INFO")
-        self.log("🔄 开始加载已加入的群组...", "INFO")
-        self.log("=" * 60, "INFO")
+        self.broadcast_log("=" * 60, "INFO")
+        self.broadcast_log("🔄 开始加载已加入的群组...", "INFO")
+        self.broadcast_log("=" * 60, "INFO")
         
         if not self.selected_accounts:
             messagebox.showerror("错误", "请先选择账号！")
@@ -2423,7 +2454,14 @@ class SmartJoinGUI:
             values = list(self.broadcast_groups_tree.item(item)['values'])
             values[0] = '☐'
             self.broadcast_groups_tree.item(item, values=values)
-        self.log("✅ 已取消全选", "INFO")
+        self.broadcast_log("✅ 已取消全选", "INFO")
+    
+    def broadcast_log(self, message: str, level: str = "INFO"):
+        """输出群发日志（到专用日志框）"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.broadcast_log_text.insert(END, f"[{timestamp}] {message}\n", level)
+        self.broadcast_log_text.see(END)
+        self.root.update()
     
     def log(self, message: str, level: str = "INFO"):
         """输出日志"""
