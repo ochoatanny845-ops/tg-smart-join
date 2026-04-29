@@ -202,20 +202,32 @@ class AccountInfo:
                 
                 # 检查账号是否被限制/冻结
                 try:
-                    # 方法1: 检查restricted字段（最准确）
+                    # 方法1: 直接检查User对象的restricted字段（最直接）
+                    if hasattr(me, 'restricted') and me.restricted:
+                        self.status = '⚠️ 账号受限/冻结'
+                        self.is_authorized = False
+                        self.real_group_count = 0
+                        print(f"[DEBUG] {self.session_name}: User.restricted = True")
+                        return
+                    
+                    # 方法2: 检查FullUser的restricted字段
                     from telethon.tl.functions.users import GetFullUserRequest
                     try:
                         full_user = await client(GetFullUserRequest(me.id))
-                        if hasattr(full_user.full_user, 'restricted') and full_user.full_user.restricted:
-                            self.status = '⚠️ 账号受限/冻结'
-                            self.is_authorized = False
-                            self.real_group_count = 0
-                            print(f"[DEBUG] {self.session_name}: 检测到restricted标记")
-                            return  # 直接返回，不继续检查
+                        
+                        # 检查full_user的限制标记
+                        if hasattr(full_user, 'users') and full_user.users:
+                            user = full_user.users[0]
+                            if hasattr(user, 'restricted') and user.restricted:
+                                self.status = '⚠️ 账号受限/冻结'
+                                self.is_authorized = False
+                                self.real_group_count = 0
+                                print(f"[DEBUG] {self.session_name}: FullUser.restricted = True")
+                                return
                     except Exception as e:
                         print(f"[DEBUG] {self.session_name}: GetFullUserRequest失败 - {e}")
                     
-                    # 方法2: 尝试获取对话列表（被冻结的账号会报错）
+                    # 方法3: 尝试获取对话列表（被冻结的账号会报错）
                     dialogs = await client.get_dialogs(limit=1)
                     
                     # 统计真实群数量（只统计群组和超级群，不包括私聊和频道）
