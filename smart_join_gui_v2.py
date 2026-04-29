@@ -780,6 +780,14 @@ class SmartJoinGUI:
         async def check_one_account(account):
             async with semaphore:
                 await account.load_info()
+                # 检查完成后立即记录日志
+                status_emoji = "✅" if account.is_authorized else "❌"
+                if "⚠️" in account.status:
+                    status_emoji = "⚠️"
+                
+                group_info = f" ({account.real_group_count}个群)" if account.real_group_count > 0 else ""
+                self.log(f"{status_emoji} [{account.phone}] {account.name} - {account.status.replace('✅ ', '').replace('❌ ', '').replace('⚠️ ', '')}{group_info}", 
+                         "SUCCESS" if account.is_authorized else "ERROR")
         
         # 创建任务列表
         tasks = [check_one_account(account) for account in accounts_to_check]
