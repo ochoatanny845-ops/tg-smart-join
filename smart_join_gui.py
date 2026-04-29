@@ -779,35 +779,22 @@ class SmartJoinGUI:
                 self.log(f"✅ 成功加入私有群: {group_title}", "SUCCESS")
                 
             elif parsed['type'] == 'username':
-                # 使用ResolveUsernameRequest替代get_entity，避免搜索问题
-                from telethon.tl.functions.contacts import ResolveUsernameRequest
-                
+                # 直接使用JoinChannelRequest + username（参考市面上的实现）
+                # 不需要ResolveUsername或get_entity！
                 try:
-                    # 直接解析用户名为实体
-                    result = await self.client(ResolveUsernameRequest(parsed['username']))
-                    
-                    if result.chats:
-                        chat = result.chats[0]
-                        # 加入频道/群组
-                        await self.client(JoinChannelRequest(chat))
-                        group_title = getattr(chat, 'title', parsed['username'])
-                        self.log(f"✅ 成功加入公开群: {group_title} (@{parsed['username']})", "SUCCESS")
-                    else:
-                        self.log(f"⚠️ 未找到群组: @{parsed['username']}", "WARNING")
-                        return False
+                    # 直接传username字符串给JoinChannelRequest
+                    await self.client(JoinChannelRequest(parsed['username']))
+                    self.log(f"✅ 成功加入公开群: @{parsed['username']}", "SUCCESS")
+                    group_title = parsed['username']  # 无法获取title，使用username代替
                         
                 except errors.UsernameNotOccupiedError:
-                    self.log(f"❌ 用户名不存在或群组已私有: @{parsed['username']}", "ERROR")
-                    self.log(f"💡 可能原因：", "WARNING")
-                    self.log(f"   1. 群组禁用了公开链接（已设为私有）", "WARNING")
-                    self.log(f"   2. 需要邀请链接才能加入", "WARNING")
-                    self.log(f"💡 解决方法：", "WARNING")
-                    self.log(f"   1. 用主账号打开群组 → 点击群名 → '邀请链接'", "WARNING")
-                    self.log(f"   2. 复制邀请链接（https://t.me/+XXXXX）", "WARNING")
-                    self.log(f"   3. 替换当前的 @{parsed['username']} 链接", "WARNING")
+                    self.log(f"❌ 用户名不存在: @{parsed['username']}", "ERROR")
                     return False
                 except errors.UsernameInvalidError:
                     self.log(f"❌ 用户名格式无效: @{parsed['username']}", "ERROR")
+                    return False
+                except errors.ChannelInvalidError:
+                    self.log(f"❌ 频道无效: @{parsed['username']}", "ERROR")
                     return False
             
             self.manager.mark_joined(link, group_title)
