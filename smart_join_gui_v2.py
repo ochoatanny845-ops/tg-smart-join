@@ -200,6 +200,10 @@ class AccountInfo:
                 self.phone = f'+{me.phone}' if me.phone else '未知'
                 self.name = me.first_name or '未知'
                 
+                # 打印User对象的所有属性（调试用）
+                print(f"[DEBUG] {self.session_name}: User属性: {dir(me)}")
+                print(f"[DEBUG] {self.session_name}: me.to_dict() = {me.to_dict()}")
+                
                 # 检查账号是否被限制/冻结
                 try:
                     # 方法1: 尝试发送消息到"Saved Messages"（最准确！）
