@@ -30,8 +30,14 @@ class Config:
     GROUPS_FILE = 'groups.txt'
     JOINED_FILE = 'joined.json'
     
+    # 每个账号加群后的间隔（秒）
     INTERVAL_MIN = 30
     INTERVAL_MAX = 120
+    
+    # 账号间加群间隔（秒，避免同一时间大量请求）
+    ACCOUNT_INTERVAL_MIN = 5
+    ACCOUNT_INTERVAL_MAX = 15
+    
     BATCH_SIZE = 5
     BATCH_REST_MIN = 300
     BATCH_REST_MAX = 600
@@ -799,9 +805,9 @@ class SmartJoinGUI:
         self.log("⏸️  已停止", "WARNING")
     
     async def run_join(self):
-        """运行加群任务"""
+        """运行加群任务（并发模式）"""
         self.log("=" * 60, "INFO")
-        self.log(f"🚀 开始加群！使用 {len(self.selected_accounts)} 个账号", "INFO")
+        self.log(f"🚀 开始加群！使用 {len(self.selected_accounts)} 个账号（并发）", "INFO")
         self.log(f"🔍 调试: selected_accounts = {self.selected_accounts}", "INFO")
         self.log("=" * 60, "INFO")
         
@@ -820,22 +826,44 @@ class SmartJoinGUI:
             return
         
         self.log(f"📋 待加入群数: {len(groups)}", "INFO")
+        self.log(f"🔀 并发模式: {len(self.selected_accounts)} 个账号同时工作", "INFO")
         
-        total = len(groups)
+        # 为每个账号创建任务
+        tasks = []
+        for account_idx, session_name in enumerate(self.selected_accounts):
+            task = self.account_worker(session_name, groups, account_idx)
+            tasks.append(task)
+        
+        # 并发执行所有账号
+        await asyncio.gather(*tasks)
+        
+        # 完成
+        self.log("=" * 60, "INFO")
+        self.log(f"✅ 所有账号加群完成！", "SUCCESS")
+        self.log("=" * 60, "INFO")
+        
+        self.stop_join()
+        
+        # 重新加载账号统计
+        self.refresh_accounts_quick()
+    
+    async def account_worker(self, session_name: str, groups: List[str], account_idx: int):
+        """单个账号的加群任务"""
+        # 错开启动时间（避免所有账号同时请求）
+        initial_delay = random.randint(Config.ACCOUNT_INTERVAL_MIN, Config.ACCOUNT_INTERVAL_MAX) * account_idx
+        if initial_delay > 0:
+            self.log(f"⏳ [{session_name}] 等待 {initial_delay} 秒后开始...", "INFO")
+            await asyncio.sleep(initial_delay)
+        
+        self.log(f"🚀 [{session_name}] 开始加群！", "INFO")
+        
         success = 0
         failed = 0
         
-        # 轮询分配任务
         for idx, link in enumerate(groups):
             if not self.is_running:
+                self.log(f"⏸️  [{session_name}] 已停止", "WARNING")
                 break
-            
-            # 选择账号（轮询）
-            session_name = self.selected_accounts[idx % len(self.selected_accounts)]
-            
-            # 更新进度
-            self.progress['value'] = (idx + 1) / total * 100
-            self.progress_label.config(text=f"[{idx + 1}/{total}] 处理中...")
             
             # 加入群
             result = await self.join_group(session_name, link)
@@ -844,24 +872,13 @@ class SmartJoinGUI:
             else:
                 failed += 1
             
-            # 智能间隔
-            if (idx + 1) % Config.BATCH_SIZE == 0:
-                rest = random.randint(Config.BATCH_REST_MIN, Config.BATCH_REST_MAX)
-                self.log(f"⏸️  完成一批，休息 {rest} 秒...", "INFO")
-                await asyncio.sleep(rest)
-            else:
+            # 智能间隔（避免被限流）
+            if idx < len(groups) - 1:  # 不是最后一个群
                 interval = random.randint(Config.INTERVAL_MIN, Config.INTERVAL_MAX)
+                self.log(f"⏰ [{session_name}] 等待 {interval} 秒...", "INFO")
                 await asyncio.sleep(interval)
         
-        # 完成
-        self.log("=" * 60, "INFO")
-        self.log(f"✅ 加群完成！成功: {success}, 失败: {failed}", "SUCCESS")
-        self.log("=" * 60, "INFO")
-        
-        self.stop_join()
-        
-        # 重新加载账号统计
-        asyncio.run(self.load_accounts())
+        self.log(f"✅ [{session_name}] 完成！成功: {success}, 失败: {failed}", "SUCCESS")
     
     async def join_group(self, session_name: str, link: str) -> bool:
         """单个账号加入群"""
