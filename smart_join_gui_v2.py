@@ -157,8 +157,8 @@ class SmartJoinGUI:
         # 创建UI
         self.setup_ui()
         
-        # 加载账号
-        asyncio.run(self.load_accounts())
+        # 启动时快速加载（不检查状态）
+        self.refresh_accounts_quick()
     
     def setup_ui(self):
         """创建UI"""
@@ -588,69 +588,6 @@ class SmartJoinGUI:
         # 更新统计
         self.update_stats()
         self.log(f"✅ 检查完成！", "SUCCESS")
-    
-    async def load_accounts(self):
-        """加载所有账号信息（并发检查）- 启动时调用"""
-        self.log("🔍 扫描Session文件...", "INFO")
-        
-        # 清空表格
-        for item in self.account_tree.get_children():
-            self.account_tree.delete(item)
-        
-        self.accounts = []
-        
-        # 扫描sessions目录
-        if not os.path.exists(Config.SESSIONS_DIR):
-            os.makedirs(Config.SESSIONS_DIR)
-            self.log("⚠️  sessions目录为空，请导入Session文件！", "WARNING")
-            return
-        
-        session_files = [f.replace('.session', '') 
-                        for f in os.listdir(Config.SESSIONS_DIR) 
-                        if f.endswith('.session')]
-        
-        if not session_files:
-            self.log("⚠️  未找到Session文件！", "WARNING")
-            return
-        
-        self.log(f"📂 发现 {len(session_files)} 个Session文件", "INFO")
-        self.log(f"🔄 并发检查账号（10线程）...", "INFO")
-        
-        # 并发加载账号信息
-        tasks = []
-        for session_name in session_files:
-            account = AccountInfo(session_name)
-            self.accounts.append(account)
-            tasks.append(account.load_info())
-        
-        # 并发执行（限制10个并发）
-        semaphore = asyncio.Semaphore(10)
-        
-        async def load_with_limit(task):
-            async with semaphore:
-                await task
-        
-        await asyncio.gather(*[load_with_limit(task) for task in tasks])
-        
-        # 添加到表格（带序号）
-        for idx, account in enumerate(self.accounts, start=1):
-            values = (
-                str(idx),  # 序号
-                '☐',      # 未选中
-                account.phone,
-                account.name,
-                account.status,
-                f"{account.joined_count}/{account.daily_limit}",
-                account.session_name
-            )
-            self.account_tree.insert('', END, values=values, tags=(account.session_name,))
-            
-            self.log(f"[{idx}] {account.phone} ({account.name}) - {account.status}", 
-                    "SUCCESS" if account.is_authorized else "WARNING")
-        
-        # 更新统计
-        self.update_stats()
-        self.log(f"✅ 加载完成！共 {len(self.accounts)} 个账号", "SUCCESS")
     
     def toggle_account_selection(self, event):
         """切换账号选择状态"""
