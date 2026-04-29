@@ -100,12 +100,30 @@ class DataManager:
 class AccountInfo:
     def __init__(self, session_name: str):
         self.session_name = session_name
-        self.phone = ''
+        # 从session文件名提取手机号
+        self.phone = self.extract_phone_from_session(session_name)
         self.name = ''
         self.status = '未知'
         self.joined_count = 0
         self.daily_limit = Config.DAILY_LIMIT
         self.is_authorized = False
+    
+    @staticmethod
+    def extract_phone_from_session(session_name: str) -> str:
+        """从session文件名提取手机号"""
+        # 尝试提取数字部分
+        import re
+        # 如果session名称全是数字，就是手机号
+        if session_name.isdigit():
+            return f'+{session_name}'
+        
+        # 尝试提取连续数字（可能是手机号）
+        match = re.search(r'\d{10,15}', session_name)
+        if match:
+            return f'+{match.group()}'
+        
+        # 如果都失败，返回session名称
+        return session_name
     
     async def load_info(self):
         """加载账号信息"""
@@ -200,18 +218,17 @@ class SmartJoinGUI:
         account_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
         
         # 账号表格
-        columns = ('序号', '选择', '手机号', '名字', '状态', '已加群数', 'Session文件')
+        columns = ('序号', '选择', '手机号', '名字', '状态', '已加群数')
         self.account_tree = ttk.Treeview(account_frame, columns=columns, 
                                         show='headings', height=8)
         
         # 列宽
         self.account_tree.column('序号', width=50, anchor=CENTER)
         self.account_tree.column('选择', width=50, anchor=CENTER)
-        self.account_tree.column('手机号', width=120, anchor=CENTER)
-        self.account_tree.column('名字', width=100, anchor=CENTER)
+        self.account_tree.column('手机号', width=150, anchor=CENTER)
+        self.account_tree.column('名字', width=120, anchor=CENTER)
         self.account_tree.column('状态', width=150, anchor=CENTER)
-        self.account_tree.column('已加群数', width=100, anchor=CENTER)
-        self.account_tree.column('Session文件', width=200, anchor=W)
+        self.account_tree.column('已加群数', width=120, anchor=CENTER)
         
         # 列标题
         for col in columns:
@@ -524,9 +541,8 @@ class SmartJoinGUI:
                 # 更新加群数
                 account.joined_count = DataManager.get_joined_count(session_name)
             else:
-                # 新账号，使用默认值
+                # 新账号，使用默认值（会自动从session名称提取手机号）
                 account = AccountInfo(session_name)
-                account.phone = '未知'
                 account.name = '未检查'
                 account.status = '⚪ 未检查'
                 account.joined_count = DataManager.get_joined_count(session_name)
@@ -539,8 +555,7 @@ class SmartJoinGUI:
                 account.phone,
                 account.name,
                 account.status,
-                f"{account.joined_count}/{account.daily_limit}",
-                account.session_name
+                f"{account.joined_count}/{account.daily_limit}"
             )
             self.account_tree.insert('', END, values=values, tags=(account.session_name,))
         
