@@ -1175,8 +1175,8 @@ class SmartJoinGUI:
                 real_groups = set()
                 for d in all_dialogs:
                     if d.is_group or d.is_channel:
-                        # 添加username（如果有）
-                        if d.entity.username:
+                        # 添加username（如果有）- 安全检查
+                        if hasattr(d.entity, 'username') and d.entity.username:
                             real_groups.add(f"@{d.entity.username}")
                             real_groups.add(f"https://t.me/{d.entity.username}")
                         # TODO: 暂时无法获取invite link，只能通过username对比
