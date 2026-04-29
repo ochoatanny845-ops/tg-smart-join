@@ -488,6 +488,10 @@ class SmartJoinGUI:
                command=self.deselect_all_accounts, 
                bg="#9E9E9E", fg="white", width=9, height=1).pack(side=LEFT, padx=2)
         
+        Button(account_btn_frame, text="🗑️ 删除选中", font=btn_font, 
+               command=self.delete_selected_accounts, 
+               bg="#F44336", fg="white", width=11, height=1).pack(side=LEFT, padx=2)
+        
         Button(account_btn_frame, text="🗑️ 删除失效", font=btn_font, 
                command=self.delete_invalid_accounts, 
                bg="#f44336", fg="white", width=11, height=1).pack(side=LEFT, padx=2)
@@ -1187,6 +1191,53 @@ class SmartJoinGUI:
             values[1] = '☐'  # 序号在0，选择框在1
             self.account_tree.item(item, values=values)
         self.update_stats()
+    
+    def delete_selected_accounts(self):
+        """删除选中的账号"""
+        if not self.selected_accounts:
+            messagebox.showinfo("提示", "请先选择要删除的账号！")
+            return
+        
+        # 获取选中账号的信息
+        selected_infos = []
+        for session_name in self.selected_accounts:
+            account = next((acc for acc in self.accounts if acc.session_name == session_name), None)
+            if account:
+                selected_infos.append(f"  - {account.phone} ({account.name}) - {account.status}")
+        
+        # 确认删除
+        msg = f"确定要删除以下 {len(self.selected_accounts)} 个账号吗？\n\n"
+        msg += "\n".join(selected_infos[:15])  # 最多显示15个
+        if len(self.selected_accounts) > 15:
+            msg += f"\n  ... 还有 {len(self.selected_accounts) - 15} 个"
+        msg += "\n\n⚠️ 这将删除Session文件，无法恢复！"
+        
+        if not messagebox.askyesno("确认删除", msg):
+            return
+        
+        # 删除Session文件
+        deleted = 0
+        for session_name in self.selected_accounts:
+            session_file = os.path.join(Config.SESSIONS_DIR, session_name + '.session')
+            try:
+                if os.path.exists(session_file):
+                    os.remove(session_file)
+                    deleted += 1
+                    account = next((acc for acc in self.accounts if acc.session_name == session_name), None)
+                    if account:
+                        self.log(f"🗑️ 已删除: {account.phone} ({session_name})", "WARNING")
+                    else:
+                        self.log(f"🗑️ 已删除: {session_name}", "WARNING")
+            except Exception as e:
+                self.log(f"❌ 删除失败: {session_name} - {e}", "ERROR")
+        
+        self.log(f"✅ 已删除 {deleted} 个账号", "SUCCESS")
+        
+        # 清空选中列表
+        self.selected_accounts = []
+        
+        # 刷新账号列表
+        self.refresh_accounts_quick()
     
     def delete_invalid_accounts(self):
         """删除失效/未授权账号"""
