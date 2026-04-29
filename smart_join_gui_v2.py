@@ -42,6 +42,9 @@ class Config:
     BATCH_REST_MIN = 300
     BATCH_REST_MAX = 600
     DAILY_LIMIT = 30
+    
+    # 重复加群模式
+    ALLOW_DUPLICATE = True  # True=所有账号加所有群，False=每个群只用一个账号
 
 # ===== 链接解析 =====
 class GroupLinkParser:
@@ -413,9 +416,19 @@ class SmartJoinGUI:
         self.daily_limit_var = IntVar(value=Config.DAILY_LIMIT)
         Entry(config_frame, textvariable=self.daily_limit_var, font=self.font_label, width=10).grid(row=5, column=1, pady=5)
         
+        # 重复加群模式
+        Label(config_frame, text="重复加群模式:", font=self.font_label).grid(row=6, column=0, sticky=W, pady=5)
+        self.allow_duplicate_var = BooleanVar(value=Config.ALLOW_DUPLICATE)
+        duplicate_frame = Frame(config_frame)
+        duplicate_frame.grid(row=6, column=1, sticky=W, pady=5)
+        Radiobutton(duplicate_frame, text="重复（所有号加所有群）", variable=self.allow_duplicate_var, 
+                   value=True, font=self.font_label).pack(anchor=W)
+        Radiobutton(duplicate_frame, text="不重复（每群只用一个号）", variable=self.allow_duplicate_var, 
+                   value=False, font=self.font_label).pack(anchor=W)
+        
         # 保存按钮
         Button(config_frame, text="💾 保存配置", font=self.font_button,
-               command=self.save_config, bg="#4CAF50", fg="white", width=15).grid(row=6, column=0, columnspan=2, pady=20)
+               command=self.save_config, bg="#4CAF50", fg="white", width=15).grid(row=7, column=0, columnspan=2, pady=20)
     
     def setup_stats_tab(self, parent):
         """统计标签页"""
@@ -498,9 +511,11 @@ class SmartJoinGUI:
         Config.BATCH_REST_MIN = self.batch_rest_min_var.get()
         Config.BATCH_REST_MAX = self.batch_rest_max_var.get()
         Config.DAILY_LIMIT = self.daily_limit_var.get()
+        Config.ALLOW_DUPLICATE = self.allow_duplicate_var.get()
         
-        self.log("✅ 配置已保存", "SUCCESS")
-        messagebox.showinfo("成功", "配置已保存！")
+        mode = "重复加群" if Config.ALLOW_DUPLICATE else "不重复加群"
+        self.log(f"✅ 配置已保存（模式: {mode}）", "SUCCESS")
+        messagebox.showinfo("成功", f"配置已保存！\n模式: {mode}")
     
     def refresh_stats(self):
         """刷新统计"""
@@ -877,16 +892,35 @@ class SmartJoinGUI:
         
         success = 0
         failed = 0
+        skipped = 0
+        
+        # 加载已加入的群（所有账号）
+        joined_all = DataManager.load_json(Config.JOINED_FILE)
         
         for idx, link in enumerate(groups):
             if not self.is_running:
                 self.log(f"⏸️  [{session_name}] 已停止", "WARNING")
                 break
             
+            # 如果是不重复模式，检查是否已被其他账号加入
+            if not Config.ALLOW_DUPLICATE:
+                already_joined_by_others = False
+                for other_session, other_groups in joined_all.items():
+                    if other_session != session_name and link in other_groups:
+                        self.log(f"⏭️  [{session_name}] 跳过（已被{other_session}加入）: {link}", "INFO")
+                        skipped += 1
+                        already_joined_by_others = True
+                        break
+                
+                if already_joined_by_others:
+                    continue
+            
             # 加入群
             result = await self.join_group(session_name, link)
             if result:
                 success += 1
+                # 重新加载joined.json（可能被其他账号更新了）
+                joined_all = DataManager.load_json(Config.JOINED_FILE)
             else:
                 failed += 1
             
@@ -896,7 +930,10 @@ class SmartJoinGUI:
                 self.log(f"⏰ [{session_name}] 等待 {interval} 秒...", "INFO")
                 await asyncio.sleep(interval)
         
-        self.log(f"✅ [{session_name}] 完成！成功: {success}, 失败: {failed}", "SUCCESS")
+        summary = f"✅ [{session_name}] 完成！成功: {success}, 失败: {failed}"
+        if not Config.ALLOW_DUPLICATE and skipped > 0:
+            summary += f", 跳过: {skipped}"
+        self.log(summary, "SUCCESS")
     
     async def join_group(self, session_name: str, link: str) -> bool:
         """单个账号加入群"""
