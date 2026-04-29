@@ -841,11 +841,34 @@ class SmartJoinGUI:
                 f.write(html_content)
                 temp_file = f.name
             
-            # 打开浏览器
-            webbrowser.open(f'file:///{temp_file.replace(chr(92), "/")}')
+            # 使用Chrome无痕模式打开
+            import subprocess
+            chrome_paths = [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                os.path.expanduser(r"~\AppData\Local\Google\Chrome\Application\chrome.exe")
+            ]
             
-            self.log(f"✅ {session_name} - 已在浏览器中打开Web版", "SUCCESS")
-            self.log(f"ℹ️  如果未自动登录，请手动扫码", "INFO")
+            chrome_exe = None
+            for path in chrome_paths:
+                if os.path.exists(path):
+                    chrome_exe = path
+                    break
+            
+            if chrome_exe:
+                # 使用Chrome无痕模式
+                subprocess.Popen([
+                    chrome_exe,
+                    '--incognito',
+                    f'file:///{temp_file.replace(chr(92), "/")}'
+                ])
+                self.log(f"✅ {session_name} - 已在Chrome无痕模式中打开", "SUCCESS")
+            else:
+                # 找不到Chrome，使用默认浏览器
+                webbrowser.open(f'file:///{temp_file.replace(chr(92), "/")}')
+                self.log(f"✅ {session_name} - 已在默认浏览器中打开", "SUCCESS")
+            
+            self.log(f"ℹ️  使用无痕模式，不会影响你的Google账号", "INFO")
             
         except Exception as e:
             self.log(f"❌ Web登录失败: {e}", "ERROR")
