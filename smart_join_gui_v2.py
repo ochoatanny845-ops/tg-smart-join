@@ -605,27 +605,28 @@ class SmartJoinGUI:
         unauthorized = 0
         updated = 0
         
-        # 更新表格
+        # 清空表格并重新添加（确保数据一致）
         for item in self.account_tree.get_children():
-            session_name = self.account_tree.item(item)['tags'][0]
-            account = next((acc for acc in self.accounts if acc.session_name == session_name), None)
+            self.account_tree.delete(item)
+        
+        # 重新添加所有账号（已检查过，有正确数据）
+        for idx, account in enumerate(self.accounts, start=1):
+            values = (
+                str(idx),
+                '☐',
+                account.phone,
+                account.name,
+                account.status,
+                f"{account.joined_count}/{account.daily_limit}"
+            )
+            self.account_tree.insert('', END, values=values, tags=(account.session_name,))
             
-            if account:
-                updated += 1
-                values = list(self.account_tree.item(item)['values'])
-                values[2] = account.phone      # 手机号
-                values[3] = account.name       # 名字
-                values[4] = account.status     # 状态
-                values[5] = f"{account.joined_count}/{account.daily_limit}"  # 已加群数
-                self.account_tree.item(item, values=values)
-                
-                # 统计
-                if account.is_authorized:
-                    authorized += 1
-                else:
-                    unauthorized += 1
+            # 统计
+            if account.is_authorized:
+                authorized += 1
             else:
-                self.log(f"⚠️  未找到账号: {session_name}", "WARNING")
+                unauthorized += 1
+            updated += 1
         
         # 更新统计
         self.update_stats()
