@@ -520,6 +520,9 @@ class SmartJoinGUI:
         # 刷新账号列表显示
         self.refresh_accounts_quick()
         
+        # 刷新统计标签页
+        self.refresh_stats()
+        
         mode = "重复加群" if Config.ALLOW_DUPLICATE else "不重复加群"
         self.log(f"✅ 配置已保存（模式: {mode}，每日限额: {Config.DAILY_LIMIT}）", "SUCCESS")
         messagebox.showinfo("成功", f"配置已保存！\n模式: {mode}\n每日限额: {Config.DAILY_LIMIT}")
