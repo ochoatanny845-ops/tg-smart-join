@@ -13,6 +13,7 @@ import re
 import os
 import json
 import random
+import threading
 from datetime import datetime
 from typing import List, Dict, Optional
 from tkinter import *
@@ -268,7 +269,7 @@ class SmartJoinGUI:
                bg="#2196F3", fg="white", width=12).pack(side=LEFT, padx=5)
         
         Button(account_btn_frame, text="🔍 检查状态", font=self.font_button, 
-               command=lambda: asyncio.run(self.check_accounts_status()), 
+               command=lambda: threading.Thread(target=lambda: asyncio.run(self.check_accounts_status()), daemon=True).start(), 
                bg="#9C27B0", fg="white", width=12).pack(side=LEFT, padx=5)
         
         Button(account_btn_frame, text="➕ 导入Session", font=self.font_button, 
@@ -775,8 +776,10 @@ class SmartJoinGUI:
         self.start_button.config(state=DISABLED)
         self.stop_button.config(state=NORMAL)
         
-        # 在后台运行
-        asyncio.run(self.run_join())
+        # 在后台线程运行（避免阻塞GUI）
+        import threading
+        thread = threading.Thread(target=lambda: asyncio.run(self.run_join()), daemon=True)
+        thread.start()
     
     def stop_join(self):
         """停止加群"""
