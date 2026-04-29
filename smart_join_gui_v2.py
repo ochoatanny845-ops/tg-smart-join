@@ -446,7 +446,15 @@ class SmartJoinGUI:
         if not joined:
             stats_text += "暂无加群记录\n"
         else:
-            total_joined = sum(len(groups) for groups in joined.values())
+            # 兼容性检查：处理旧格式
+            total_joined = 0
+            for session_name, groups in joined.items():
+                # 如果是旧格式（int），转换成新格式（list）
+                if isinstance(groups, int):
+                    total_joined += groups
+                elif isinstance(groups, list):
+                    total_joined += len(groups)
+            
             stats_text += f"📈 总计: {len(joined)} 个账号，已加入 {total_joined} 个群\n\n"
             
             for session_name, groups in joined.items():
@@ -457,10 +465,18 @@ class SmartJoinGUI:
                 else:
                     stats_text += f"👤 {session_name}\n"
                 
-                stats_text += f"   已加入群数: {len(groups)}\n"
-                stats_text += f"   最近5个群:\n"
-                for group in groups[-5:]:
-                    stats_text += f"      - {group}\n"
+                # 处理不同格式
+                if isinstance(groups, int):
+                    stats_text += f"   已加入群数: {groups}\n"
+                    stats_text += f"   ⚠️  旧格式数据，无详细记录\n"
+                elif isinstance(groups, list):
+                    stats_text += f"   已加入群数: {len(groups)}\n"
+                    stats_text += f"   最近5个群:\n"
+                    for group in groups[-5:]:
+                        stats_text += f"      - {group}\n"
+                else:
+                    stats_text += f"   ⚠️  数据格式错误\n"
+                
                 stats_text += "\n"
         
         self.stats_text.insert('1.0', stats_text)
