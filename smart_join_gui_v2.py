@@ -111,18 +111,21 @@ class AccountInfo:
     @staticmethod
     def extract_phone_from_session(session_name: str) -> str:
         """从session文件名提取手机号"""
-        # 尝试提取数字部分
         import re
-        # 如果session名称全是数字，就是手机号
-        if session_name.isdigit():
-            return f'+{session_name}'
+        
+        # 移除开头的+号（如果有）
+        clean_name = session_name.lstrip('+')
+        
+        # 如果清理后的名称全是数字，就是手机号
+        if clean_name.isdigit():
+            return f'+{clean_name}'
         
         # 尝试提取连续数字（可能是手机号）
-        match = re.search(r'\d{10,15}', session_name)
+        match = re.search(r'\d{10,15}', clean_name)
         if match:
             return f'+{match.group()}'
         
-        # 如果都失败，返回session名称
+        # 如果都失败，返回原session名称（可能带+）
         return session_name
     
     async def load_info(self):
@@ -532,6 +535,7 @@ class SmartJoinGUI:
             self.log("⚠️  sessions目录为空！", "WARNING")
             return
         
+        # 移除.session后缀，得到session名称
         session_files = [f.replace('.session', '') 
                         for f in os.listdir(Config.SESSIONS_DIR) 
                         if f.endswith('.session')]
@@ -546,10 +550,15 @@ class SmartJoinGUI:
         
         # 添加到表格（使用旧状态或默认状态）
         for idx, session_name in enumerate(session_files, start=1):
-            # 如果之前有这个账号，使用旧数据
-            if session_name in old_accounts:
-                account = old_accounts[session_name]
-                # 更新加群数
+            # 标准化session名称（移除开头的+号，如果有的话）
+            normalized_name = session_name.lstrip('+')
+            
+            # 尝试从旧账号中找（支持带+和不带+两种格式）
+            account = old_accounts.get(session_name) or old_accounts.get(normalized_name) or old_accounts.get('+' + normalized_name)
+            
+            if account:
+                # 使用旧数据，更新加群数
+                account.session_name = session_name  # 更新为当前文件名
                 account.joined_count = DataManager.get_joined_count(session_name)
             else:
                 # 新账号，使用默认值（会自动从session名称提取手机号）
