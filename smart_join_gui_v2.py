@@ -1305,6 +1305,10 @@ class SmartJoinGUI:
                 self.log(f"🔍 [{account.phone}] 正在查询群列表...", "INFO")
                 all_dialogs = await client.get_dialogs()
                 
+                # 统计真实群数量（更新real_group_count）
+                real_group_count = sum(1 for d in all_dialogs if d.is_group or d.is_channel)
+                account.real_group_count = real_group_count  # 更新账号的实际群数
+                
                 # 提取所有群组和频道的username和invite link
                 real_groups = set()
                 for d in all_dialogs:
