@@ -1057,6 +1057,10 @@ class SmartJoinGUI:
             if not Config.ALLOW_DUPLICATE:
                 already_joined_by_others = False
                 for other_session, other_groups in joined_all.items():
+                    # 兼容性检查：other_groups可能是int（旧格式）或list（新格式）
+                    if isinstance(other_groups, int):
+                        continue  # 旧格式，跳过
+                    
                     if other_session != session_name and link in other_groups:
                         self.log(f"⏭️  [{session_name}] 跳过（已被{other_session}加入）: {link}", "INFO")
                         skipped += 1
