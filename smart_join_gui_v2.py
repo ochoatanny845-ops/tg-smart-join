@@ -386,6 +386,8 @@ class SmartJoinGUI:
         self.broadcast_total_sent = 0
         self.broadcast_total_success = 0
         self.broadcast_total_failed = 0
+        self.broadcast_groups = []  # 已加入的群组列表
+        self.selected_broadcast_groups = []  # 选中的群组
         
         # 加载保存的配置
         Config.load_config()
@@ -1857,11 +1859,57 @@ class SmartJoinGUI:
                                  font=self.font_menu, padx=10, pady=10)
         target_frame.pack(fill=X, padx=10, pady=5)
         
-        self.broadcast_target_var = StringVar(value="joined")
+        self.broadcast_target_var = StringVar(value="file")
         Radiobutton(target_frame, text="所有已加入的群组", variable=self.broadcast_target_var, 
                    value="joined", font=self.font_label).grid(row=0, column=0, sticky=W, pady=2)
         Radiobutton(target_frame, text="群列表文件（groups.txt）", variable=self.broadcast_target_var, 
                    value="file", font=self.font_label).grid(row=1, column=0, sticky=W, pady=2)
+        Radiobutton(target_frame, text="选中的群组（手动勾选）", variable=self.broadcast_target_var, 
+                   value="selected", font=self.font_label).grid(row=2, column=0, sticky=W, pady=2)
+        
+        # 群组列表区（用于手动勾选）
+        groups_list_frame = LabelFrame(parent_container, text="📋 群组列表（手动勾选模式）", 
+                                      font=self.font_menu, padx=10, pady=10)
+        groups_list_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
+        
+        # 创建群组列表Treeview
+        columns = ('选择', '序号', '群组名称', '类型')
+        self.broadcast_groups_tree = ttk.Treeview(groups_list_frame, columns=columns, 
+                                                 show='headings', height=6)
+        
+        self.broadcast_groups_tree.column('选择', width=50, anchor=CENTER)
+        self.broadcast_groups_tree.column('序号', width=50, anchor=CENTER)
+        self.broadcast_groups_tree.column('群组名称', width=250, anchor=W)
+        self.broadcast_groups_tree.column('类型', width=80, anchor=CENTER)
+        
+        for col in columns:
+            self.broadcast_groups_tree.heading(col, text=col)
+        
+        groups_scrollbar = ttk.Scrollbar(groups_list_frame, orient=VERTICAL, 
+                                        command=self.broadcast_groups_tree.yview)
+        self.broadcast_groups_tree.configure(yscrollcommand=groups_scrollbar.set)
+        
+        self.broadcast_groups_tree.pack(side=LEFT, fill=BOTH, expand=True)
+        groups_scrollbar.pack(side=RIGHT, fill=Y)
+        
+        # 双击切换选择
+        self.broadcast_groups_tree.bind('<Double-1>', self.toggle_broadcast_group_selection)
+        
+        # 群组操作按钮
+        groups_btn_frame = Frame(parent_container)
+        groups_btn_frame.pack(fill=X, padx=10, pady=5)
+        
+        Button(groups_btn_frame, text="🔄 加载已加入的群组", font=("Arial", 10, "bold"),
+               command=lambda: threading.Thread(target=lambda: asyncio.run(self.load_joined_groups()), daemon=True).start(),
+               bg="#2196F3", fg="white", width=18).pack(side=LEFT, padx=2)
+        
+        Button(groups_btn_frame, text="✅ 全选", font=("Arial", 10, "bold"),
+               command=self.select_all_broadcast_groups,
+               bg="#FF9800", fg="white", width=8).pack(side=LEFT, padx=2)
+        
+        Button(groups_btn_frame, text="❌ 全不选", font=("Arial", 10, "bold"),
+               command=self.deselect_all_broadcast_groups,
+               bg="#9E9E9E", fg="white", width=9).pack(side=LEFT, padx=2)
         
         # 发送配置
         config_frame = LabelFrame(parent_container, text="⚙️ 发送配置", 
@@ -1956,13 +2004,27 @@ class SmartJoinGUI:
         
         # 获取目标群组列表
         target_mode = self.broadcast_target_var.get()
+        target_groups = []
         
         if target_mode == "joined":
-            # 从已加入的群组
-            self.log("🎯 目标: 所有已加入的群组", "INFO")
-            # TODO: 实现获取已加入群组的逻辑
-            messagebox.showinfo("提示", "此功能正在开发中...")
-            return
+            # 所有已加入的群组
+            if not self.broadcast_groups:
+                messagebox.showerror("错误", "请先点击'加载已加入的群组'！")
+                return
+            
+            self.log(f"🎯 目标: 所有已加入的群组，共 {len(self.broadcast_groups)} 个", "INFO")
+            target_groups = self.broadcast_groups
+            
+        elif target_mode == "selected":
+            # 选中的群组
+            if not self.selected_broadcast_groups:
+                messagebox.showerror("错误", "请先勾选要发送的群组！")
+                return
+            
+            selected_groups = [self.broadcast_groups[idx] for idx in self.selected_broadcast_groups]
+            self.log(f"🎯 目标: 选中的群组，共 {len(selected_groups)} 个", "INFO")
+            target_groups = selected_groups
+            
         elif target_mode == "file":
             # 从groups.txt
             if not os.path.exists(Config.GROUPS_FILE):
@@ -1978,12 +2040,191 @@ class SmartJoinGUI:
             
             self.log(f"🎯 目标: 群列表文件，共 {len(groups)} 个群", "INFO")
             
-            # 开始群发
-            await self.broadcast_to_groups(groups, message)
+            # 转换为统一格式
+            target_groups = [{'type': 'link', 'link': link} for link in groups]
+        
+        # 开始群发
+        await self.broadcast_to_groups_new(target_groups, message)
         
         self.log("=" * 60, "INFO")
         self.log("✅ 群发完成！", "SUCCESS")
         self.log("=" * 60, "INFO")
+    
+    async def broadcast_to_groups_new(self, target_groups, message):
+        """新版群发（支持多账号并发）"""
+        # 检查是否有多个账号
+        if len(self.selected_accounts) > 1:
+            self.log(f"🔀 多账号并发模式: {len(self.selected_accounts)} 个账号", "INFO")
+            # 分配群组给账号
+            groups_per_account = len(target_groups) // len(self.selected_accounts)
+            
+            tasks = []
+            for idx, session_name in enumerate(self.selected_accounts):
+                start_idx = idx * groups_per_account
+                end_idx = start_idx + groups_per_account if idx < len(self.selected_accounts) - 1 else len(target_groups)
+                account_groups = target_groups[start_idx:end_idx]
+                
+                if account_groups:
+                    self.log(f"📋 [{session_name}] 负责 {len(account_groups)} 个群组", "INFO")
+                    task = self.broadcast_worker(session_name, account_groups, message, idx)
+                    tasks.append(task)
+            
+            # 并发执行
+            await asyncio.gather(*tasks)
+        else:
+            # 单账号模式
+            session_name = self.selected_accounts[0]
+            self.log(f"👤 单账号模式: {session_name}", "INFO")
+            await self.broadcast_worker(session_name, target_groups, message, 0)
+    
+    async def broadcast_worker(self, session_name, target_groups, message, worker_idx):
+        """单个账号的群发worker"""
+        # 错开启动时间
+        initial_delay = worker_idx * random.randint(5, 15)
+        if initial_delay > 0:
+            self.log(f"⏳ [{session_name}] 等待 {initial_delay} 秒后开始...", "INFO")
+            await asyncio.sleep(initial_delay)
+        
+        session_path = os.path.join(Config.SESSIONS_DIR, session_name)
+        client = TelegramClient(session_path, Config.API_ID, Config.API_HASH)
+        
+        try:
+            await client.connect()
+            
+            if not await client.is_user_authorized():
+                self.log(f"❌ [{session_name}] 未授权", "ERROR")
+                return
+            
+            self.log(f"🚀 [{session_name}] 开始群发！", "INFO")
+            
+            for idx, group_info in enumerate(target_groups, start=1):
+                if not self.is_broadcasting:
+                    self.log(f"⏹️ [{session_name}] 已停止", "WARNING")
+                    break
+                
+                # 构造消息
+                msg = self.prepare_message(message, idx, group_info)
+                
+                # 发送
+                success = await self.send_to_group_new(client, session_name, group_info, msg)
+                
+                if success:
+                    self.broadcast_total_success += 1
+                    self.broadcast_stat_success.config(text=f"成功: {self.broadcast_total_success}")
+                else:
+                    self.broadcast_total_failed += 1
+                    self.broadcast_stat_failed.config(text=f"失败: {self.broadcast_total_failed}")
+                
+                self.broadcast_total_sent += 1
+                self.broadcast_stat_sent.config(text=f"已发送: {self.broadcast_total_sent}/{len(target_groups) * len(self.selected_accounts)}")
+                
+                # 间隔
+                if idx < len(target_groups):
+                    interval = random.randint(
+                        self.broadcast_interval_min_var.get(),
+                        self.broadcast_interval_max_var.get()
+                    )
+                    self.log(f"⏰ [{session_name}] 等待 {interval} 秒...", "INFO")
+                    await asyncio.sleep(interval)
+            
+            self.log(f"✅ [{session_name}] 完成！", "SUCCESS")
+        
+        except Exception as e:
+            self.log(f"❌ [{session_name}] 错误: {e}", "ERROR")
+        
+        finally:
+            await client.disconnect()
+    
+    def prepare_message(self, message, idx, group_info):
+        """准备消息（变量替换+随机改写）"""
+        msg = message
+        
+        # 变量替换
+        if self.broadcast_use_variables_var.get():
+            msg = msg.replace("{index}", str(idx))
+            msg = msg.replace("{time}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            
+            # 获取群组名称
+            if 'name' in group_info:
+                group_name = group_info['name']
+            elif 'link' in group_info:
+                group_name = group_info['link'].split('/')[-1]
+            else:
+                group_name = "未知"
+            
+            msg = msg.replace("{group_name}", group_name)
+        
+        # 随机改写
+        if self.broadcast_random_rewrite_var.get():
+            import random
+            emojis = ['😊', '👋', '✨', '🌟', '💫', '🎉', '🔥', '💪']
+            msg += f" {random.choice(emojis)}"
+        
+        return msg
+    
+    async def send_to_group_new(self, client, session_name, group_info, message):
+        """发送消息到群组（新版，支持FloodWait）"""
+        try:
+            # 确定发送目标
+            if 'entity' in group_info:
+                # 直接使用entity
+                target = group_info['entity']
+                group_name = group_info.get('name', '未知')
+            elif 'link' in group_info:
+                # 解析链接
+                parsed = GroupLinkParser.parse_link(group_info['link'])
+                if not parsed:
+                    self.log(f"⚠️ [{session_name}] 无法解析: {group_info['link']}", "WARNING")
+                    return False
+                
+                target = parsed['username'] if parsed['type'] == 'username' else parsed['hash']
+                group_name = group_info['link']
+            else:
+                self.log(f"⚠️ [{session_name}] 无效的群组信息", "WARNING")
+                return False
+            
+            # 发送消息
+            if self.broadcast_image_path.get():
+                # 有图片
+                await client.send_message(target, message, file=self.broadcast_image_path.get())
+            else:
+                # 纯文本
+                await client.send_message(target, message)
+            
+            self.log(f"✅ [{session_name}] 发送成功: {group_name}", "SUCCESS")
+            return True
+        
+        except errors.FloodWaitError as flood:
+            # FloodWait处理
+            wait_seconds = flood.seconds
+            self.log(f"⚠️ [{session_name}] FloodWait: 需等待 {wait_seconds} 秒", "WARNING")
+            
+            if wait_seconds <= 120:
+                # 自动等待
+                self.log(f"⏳ [{session_name}] 自动等待 {wait_seconds} 秒后重试...", "INFO")
+                await asyncio.sleep(wait_seconds + 5)
+                
+                # 重试
+                try:
+                    if self.broadcast_image_path.get():
+                        await client.send_message(target, message, file=self.broadcast_image_path.get())
+                    else:
+                        await client.send_message(target, message)
+                    
+                    self.log(f"✅ [{session_name}] 重试成功: {group_name}", "SUCCESS")
+                    return True
+                except:
+                    self.log(f"❌ [{session_name}] 重试失败: {group_name}", "ERROR")
+                    return False
+            else:
+                # 时间太长，跳过
+                self.log(f"❌ [{session_name}] FloodWait时间过长，跳过", "ERROR")
+                return False
+        
+        except Exception as e:
+            group_name = group_info.get('name', group_info.get('link', '未知'))
+            self.log(f"❌ [{session_name}] 发送失败: {group_name} - {e}", "ERROR")
+            return False
     
     async def broadcast_to_groups(self, groups, message):
         """向群组列表群发消息"""
@@ -2080,6 +2321,109 @@ class SmartJoinGUI:
         """停止群发"""
         self.is_broadcasting = False
         self.log("⏹️ 正在停止群发...", "WARNING")
+    
+    async def load_joined_groups(self):
+        """加载已加入的群组"""
+        self.log("=" * 60, "INFO")
+        self.log("🔄 开始加载已加入的群组...", "INFO")
+        self.log("=" * 60, "INFO")
+        
+        if not self.selected_accounts:
+            messagebox.showerror("错误", "请先选择账号！")
+            return
+        
+        # 清空列表
+        for item in self.broadcast_groups_tree.get_children():
+            self.broadcast_groups_tree.delete(item)
+        
+        self.broadcast_groups = []
+        
+        # 使用第一个选中的账号
+        session_name = self.selected_accounts[0]
+        session_path = os.path.join(Config.SESSIONS_DIR, session_name)
+        client = TelegramClient(session_path, Config.API_ID, Config.API_HASH)
+        
+        try:
+            await client.connect()
+            
+            if not await client.is_user_authorized():
+                self.log(f"❌ [{session_name}] 未授权", "ERROR")
+                return
+            
+            self.log(f"🔍 [{session_name}] 正在查询群组列表...", "INFO")
+            all_dialogs = await client.get_dialogs()
+            
+            # 过滤出群组和频道
+            idx = 0
+            for d in all_dialogs:
+                if d.is_group or d.is_channel:
+                    idx += 1
+                    group_type = "频道" if d.is_channel else "群组"
+                    group_name = d.name or "未知"
+                    group_username = d.entity.username if hasattr(d.entity, 'username') and d.entity.username else None
+                    
+                    # 保存群组信息
+                    group_info = {
+                        'name': group_name,
+                        'type': group_type,
+                        'username': group_username,
+                        'entity': d.entity
+                    }
+                    self.broadcast_groups.append(group_info)
+                    
+                    # 添加到列表
+                    values = ('☐', str(idx), group_name, group_type)
+                    self.broadcast_groups_tree.insert('', END, values=values, tags=(f'group_{idx}',))
+            
+            self.log(f"✅ 已加载 {idx} 个群组/频道", "SUCCESS")
+        
+        except Exception as e:
+            self.log(f"❌ 加载失败: {e}", "ERROR")
+        
+        finally:
+            await client.disconnect()
+    
+    def toggle_broadcast_group_selection(self, event):
+        """切换群组选择状态"""
+        item = self.broadcast_groups_tree.identify_row(event.y)
+        if not item:
+            return
+        
+        # 获取tag（group_idx）
+        tag_with_prefix = self.broadcast_groups_tree.item(item)['tags'][0]
+        group_idx = int(tag_with_prefix.replace('group_', '')) - 1  # 转为0-based索引
+        
+        # 切换选择状态
+        current_values = list(self.broadcast_groups_tree.item(item)['values'])
+        if current_values[0] == '☐':
+            current_values[0] = '☑'
+            if group_idx not in self.selected_broadcast_groups:
+                self.selected_broadcast_groups.append(group_idx)
+        else:
+            current_values[0] = '☐'
+            if group_idx in self.selected_broadcast_groups:
+                self.selected_broadcast_groups.remove(group_idx)
+        
+        self.broadcast_groups_tree.item(item, values=current_values)
+    
+    def select_all_broadcast_groups(self):
+        """全选群组"""
+        self.selected_broadcast_groups = []
+        for idx, item in enumerate(self.broadcast_groups_tree.get_children()):
+            values = list(self.broadcast_groups_tree.item(item)['values'])
+            values[0] = '☑'
+            self.broadcast_groups_tree.item(item, values=values)
+            self.selected_broadcast_groups.append(idx)
+        self.log(f"✅ 已全选 {len(self.selected_broadcast_groups)} 个群组", "INFO")
+    
+    def deselect_all_broadcast_groups(self):
+        """全不选群组"""
+        self.selected_broadcast_groups = []
+        for item in self.broadcast_groups_tree.get_children():
+            values = list(self.broadcast_groups_tree.item(item)['values'])
+            values[0] = '☐'
+            self.broadcast_groups_tree.item(item, values=values)
+        self.log("✅ 已取消全选", "INFO")
     
     def log(self, message: str, level: str = "INFO"):
         """输出日志"""
