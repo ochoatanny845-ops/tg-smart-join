@@ -99,9 +99,9 @@ class DataManager:
 # ===== 账号信息 =====
 class AccountInfo:
     def __init__(self, session_name: str):
-        self.session_name = session_name
+        self.session_name = str(session_name)  # 强制转换为字符串
         # 从session文件名提取手机号
-        self.phone = self.extract_phone_from_session(session_name)
+        self.phone = self.extract_phone_from_session(self.session_name)
         self.name = ''
         self.status = '未知'
         self.joined_count = 0
@@ -535,8 +535,8 @@ class SmartJoinGUI:
             self.log("⚠️  sessions目录为空！", "WARNING")
             return
         
-        # 移除.session后缀，得到session名称
-        session_files = [f.replace('.session', '') 
+        # 移除.session后缀，得到session名称（确保是字符串）
+        session_files = [str(f.replace('.session', '')) 
                         for f in os.listdir(Config.SESSIONS_DIR) 
                         if f.endswith('.session')]
         
