@@ -2471,17 +2471,22 @@ class SmartJoinGUI:
             self.broadcast_log(f"🔍 [{session_name}] 正在查询群组列表...", "INFO")
             all_dialogs = await client.get_dialogs()
             
-            # 过滤出群组和频道（包括私有群）
+            # 只过滤群组（不包括频道）
             idx = 0
             total_dialogs = len(all_dialogs)
             self.broadcast_log(f"📊 [{session_name}] 总对话数: {total_dialogs}", "INFO")
             
             for d in all_dialogs:
-                if d.is_group or d.is_channel:
+                # 只显示群组，不显示频道
+                # is_group=True: 公开群组和私密群组
+                # is_channel=True: 频道（排除）
+                if d.is_group and not d.is_channel:
                     idx += 1
-                    group_type = "频道" if d.is_channel else "群组"
                     group_name = d.name or "未知"
                     group_username = d.entity.username if hasattr(d.entity, 'username') and d.entity.username else None
+                    
+                    # 判断群组类型（公开/私密）
+                    group_type = "公开群组" if group_username else "私密群组"
                     
                     # 保存群组信息
                     group_info = {
@@ -2496,7 +2501,7 @@ class SmartJoinGUI:
                     values = ('☐', str(idx), group_name, group_type)
                     self.broadcast_groups_tree.insert('', END, values=values, tags=(f'group_{idx}',))
             
-            self.broadcast_log(f"✅ 已加载 {idx} 个群组/频道", "SUCCESS")
+            self.broadcast_log(f"✅ 已加载 {idx} 个群组（不含频道）", "SUCCESS")
         
         except Exception as e:
             self.broadcast_log(f"❌ 加载失败: {e}", "ERROR")
