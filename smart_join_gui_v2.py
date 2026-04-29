@@ -2430,8 +2430,10 @@ class SmartJoinGUI:
         self.broadcast_log("🔄 开始加载已加入的群组...", "INFO")
         self.broadcast_log("=" * 60, "INFO")
         
-        if not self.selected_accounts:
-            messagebox.showerror("错误", "请先选择账号！")
+        # 检查是否选中账号
+        if not self.selected_broadcast_accounts:
+            self.broadcast_log("❌ 请先刷新并选择账号！", "ERROR")
+            messagebox.showerror("错误", "请先点击[🔄 刷新账号列表]并选择账号！")
             return
         
         # 清空列表
@@ -2442,14 +2444,18 @@ class SmartJoinGUI:
         
         # 使用第一个选中的账号
         session_name = self.selected_broadcast_accounts[0]
+        self.broadcast_log(f"📱 使用账号: {session_name}", "INFO")
+        
         session_path = os.path.join(Config.SESSIONS_DIR, session_name)
         client = TelegramClient(session_path, Config.API_ID, Config.API_HASH)
         
         try:
+            self.broadcast_log(f"🔗 [{session_name}] 正在连接...", "INFO")
             await client.connect()
             
             if not await client.is_user_authorized():
                 self.broadcast_log(f"❌ [{session_name}] 未授权", "ERROR")
+                messagebox.showerror("错误", f"账号 {session_name} 未授权！请先在主界面添加账号。")
                 return
             
             self.broadcast_log(f"🔍 [{session_name}] 正在查询群组列表...", "INFO")
@@ -2484,9 +2490,12 @@ class SmartJoinGUI:
         
         except Exception as e:
             self.broadcast_log(f"❌ 加载失败: {e}", "ERROR")
+            import traceback
+            self.broadcast_log(f"详细错误: {traceback.format_exc()}", "ERROR")
         
         finally:
             await client.disconnect()
+            self.broadcast_log("🔌 已断开连接", "INFO")
     
     def toggle_broadcast_group_selection(self, event):
         """切换群组选择状态"""
