@@ -273,6 +273,9 @@ class SmartJoinGUI:
         # 双击切换选择
         self.account_tree.bind('<Double-1>', self.toggle_account_selection)
         
+        # 右键菜单
+        self.account_tree.bind('<Button-3>', self.show_account_menu)
+        
         # 账号操作按钮
         account_btn_frame = Frame(parent)
         account_btn_frame.pack(fill=X, padx=10, pady=5)
@@ -731,6 +734,127 @@ class SmartJoinGUI:
         
         self.account_tree.item(item, values=current_values)
         self.update_stats()
+    
+    def show_account_menu(self, event):
+        """显示右键菜单"""
+        # 选中右键点击的项
+        item = self.account_tree.identify_row(event.y)
+        if not item:
+            return
+        
+        self.account_tree.selection_set(item)
+        
+        # 创建菜单
+        menu = Menu(self.root, tearoff=0, font=self.font_label)
+        menu.add_command(label="🌐 登录Web版", command=lambda: self.login_web(item))
+        
+        # 显示菜单
+        menu.post(event.x_root, event.y_root)
+    
+    def login_web(self, item):
+        """登录Telegram Web版"""
+        tag_with_prefix = self.account_tree.item(item)['tags'][0]
+        session_name = tag_with_prefix.replace('session_', '')
+        
+        self.log(f"🌐 正在为 {session_name} 登录Web版...", "INFO")
+        
+        # 在后台线程执行
+        threading.Thread(target=lambda: self._login_web_worker(session_name), daemon=True).start()
+    
+    def _login_web_worker(self, session_name: str):
+        """Web登录工作线程"""
+        try:
+            import sqlite3
+            import base64
+            import struct
+            
+            # Session文件路径
+            session_path = os.path.join(Config.SESSIONS_DIR, session_name + '.session')
+            
+            if not os.path.exists(session_path):
+                self.log(f"❌ Session文件不存在: {session_path}", "ERROR")
+                return
+            
+            # 读取session数据
+            conn = sqlite3.connect(session_path)
+            cursor = conn.cursor()
+            
+            # 获取auth_key
+            cursor.execute("SELECT auth_key, dc_id, server_address, port FROM sessions")
+            row = cursor.fetchone()
+            
+            if not row:
+                self.log(f"❌ Session数据为空", "ERROR")
+                conn.close()
+                return
+            
+            auth_key_bytes, dc_id, server_address, port = row
+            
+            # 转换auth_key为base64
+            auth_key = base64.b64encode(auth_key_bytes).decode('utf-8')
+            
+            # 获取server_salt（如果存在）
+            cursor.execute("SELECT data FROM sessions LIMIT 1")
+            session_data = cursor.fetchone()
+            
+            conn.close()
+            
+            # 构造认证数据（参考Chrome扩展格式）
+            auth_data = {
+                "dc": dc_id,
+                "auth_key": f'"{auth_key}"',  # 用引号包裹
+                "server_salt": '""',  # 空值也用引号
+                "user_auth": {}
+            }
+            
+            # 生成JavaScript注入代码
+            js_code = f"""
+            localStorage.setItem('dc', '{dc_id}');
+            localStorage.setItem('dc{dc_id}_auth_key', '"{auth_key}"');
+            localStorage.setItem('dc{dc_id}_server_salt', '""');
+            localStorage.setItem('user_auth', '{{"dcID":{dc_id},"id":0}}');
+            console.log('✅ Telegram认证数据已注入');
+            """
+            
+            # 打开浏览器并注入数据
+            import webbrowser
+            import tempfile
+            
+            # 创建临时HTML文件（包含自动注入和跳转）
+            html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Telegram Web Login</title>
+</head>
+<body>
+    <h2>正在登录Telegram Web版...</h2>
+    <p>请稍候...</p>
+    <script>
+    {js_code}
+    // 注入后跳转到Telegram Web
+    setTimeout(() => {{
+        window.location.href = 'https://web.telegram.org/a/';
+    }}, 500);
+    </script>
+</body>
+</html>"""
+            
+            # 保存临时文件
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
+                f.write(html_content)
+                temp_file = f.name
+            
+            # 打开浏览器
+            webbrowser.open(f'file:///{temp_file.replace(chr(92), "/")}')
+            
+            self.log(f"✅ {session_name} - 已在浏览器中打开Web版", "SUCCESS")
+            self.log(f"ℹ️  如果未自动登录，请手动扫码", "INFO")
+            
+        except Exception as e:
+            self.log(f"❌ Web登录失败: {e}", "ERROR")
+            import traceback
+            traceback.print_exc()
     
     def select_all_accounts(self):
         """全选"""
