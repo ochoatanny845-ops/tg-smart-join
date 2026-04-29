@@ -404,6 +404,10 @@ class SmartJoinGUI:
                command=self.delete_invalid_accounts, 
                bg="#f44336", fg="white", width=10).pack(side=LEFT, padx=5)
         
+        Button(account_btn_frame, text="🔄 同步群数据", font=self.font_button, 
+               command=lambda: threading.Thread(target=lambda: asyncio.run(self.sync_group_data()), daemon=True).start(), 
+               bg="#00BCD4", fg="white", width=12).pack(side=LEFT, padx=5)
+        
         # 统计信息
         stats_frame = LabelFrame(parent, text="📊 统计信息", 
                                 font=self.font_menu, padx=10, pady=5)
@@ -1109,6 +1113,102 @@ class SmartJoinGUI:
         self.log(f"✅ 已删除 {deleted} 个失效账号", "SUCCESS")
         
         # 快速刷新
+        self.refresh_accounts_quick()
+    
+    async def sync_group_data(self):
+        """同步群数据（清理joined.json中已退出的群）"""
+        self.log("=" * 60, "INFO")
+        self.log("🔄 开始同步群数据...", "INFO")
+        self.log("=" * 60, "INFO")
+        
+        # 加载joined.json
+        joined_data = DataManager.load_json(Config.JOINED_FILE)
+        
+        total_accounts = 0
+        total_cleaned = 0
+        
+        for account in self.accounts:
+            if not account.is_authorized:
+                continue
+            
+            session_path = os.path.join(Config.SESSIONS_DIR, account.session_name)
+            client = TelegramClient(session_path, Config.API_ID, Config.API_HASH)
+            
+            try:
+                await client.connect()
+                
+                if not await client.is_user_authorized():
+                    continue
+                
+                # 获取真实的群列表
+                self.log(f"🔍 [{account.phone}] 正在查询群列表...", "INFO")
+                all_dialogs = await client.get_dialogs()
+                
+                # 提取所有群组和频道的username和invite link
+                real_groups = set()
+                for d in all_dialogs:
+                    if d.is_group or d.is_channel:
+                        # 添加username（如果有）
+                        if d.entity.username:
+                            real_groups.add(f"@{d.entity.username}")
+                            real_groups.add(f"https://t.me/{d.entity.username}")
+                        # TODO: 暂时无法获取invite link，只能通过username对比
+                
+                # 检查joined.json中的群是否还存在
+                session_name = account.session_name
+                if session_name in joined_data:
+                    recorded_groups = joined_data[session_name]
+                    
+                    # 兼容旧格式
+                    if isinstance(recorded_groups, int):
+                        self.log(f"⚠️  [{account.phone}] joined.json是旧格式（int），跳过", "WARNING")
+                        continue
+                    
+                    # 检查哪些群已经不在了
+                    cleaned_groups = []
+                    removed_count = 0
+                    
+                    for group_link in recorded_groups:
+                        # 简单检查：如果群链接包含username，且在real_groups中，保留
+                        # 否则，可能已退出
+                        found = False
+                        for real_group in real_groups:
+                            if group_link in real_group or real_group in group_link:
+                                found = True
+                                break
+                        
+                        if found:
+                            cleaned_groups.append(group_link)
+                        else:
+                            self.log(f"🗑️  [{account.phone}] 已退出: {group_link}", "WARNING")
+                            removed_count += 1
+                    
+                    # 更新joined.json
+                    joined_data[session_name] = cleaned_groups
+                    total_cleaned += removed_count
+                    total_accounts += 1
+                    
+                    self.log(f"✅ [{account.phone}] 完成！移除 {removed_count} 个已退出的群", "SUCCESS")
+                
+                await client.disconnect()
+                
+            except Exception as e:
+                self.log(f"❌ [{account.phone}] 同步失败: {e}", "ERROR")
+                try:
+                    await client.disconnect()
+                except:
+                    pass
+        
+        # 保存更新后的joined.json
+        if total_cleaned > 0:
+            DataManager.save_json(Config.JOINED_FILE, joined_data)
+            self.log(f"💾 已保存更新后的joined.json", "SUCCESS")
+        
+        self.log("=" * 60, "INFO")
+        self.log(f"✅ 同步完成！处理 {total_accounts} 个账号，清理 {total_cleaned} 条无效记录", "SUCCESS")
+        self.log("=" * 60, "INFO")
+        
+        # 刷新账号列表
         self.refresh_accounts_quick()
     
     def update_stats(self):
