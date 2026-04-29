@@ -202,7 +202,45 @@ class AccountInfo:
                 
                 # 检查账号是否被限制/冻结
                 try:
-                    # 方法1: 直接检查User对象的restricted字段（最直接）
+                    # 方法1: 尝试发送消息到"Saved Messages"（最准确！）
+                    # 冻结账号无法发送任何消息，包括给自己
+                    try:
+                        # 发送一条测试消息到收藏夹
+                        msg = await client.send_message('me', '.')
+                        # 立即删除
+                        await client.delete_messages('me', msg.id)
+                        # 成功 → 账号正常
+                        print(f"[DEBUG] {self.session_name}: 发送消息测试通过 - 账号正常")
+                    except errors.ChatWriteForbiddenError:
+                        # 无法发送消息 → 账号冻结
+                        self.status = '⚠️ 账号受限/冻结'
+                        self.is_authorized = False
+                        self.real_group_count = 0
+                        print(f"[DEBUG] {self.session_name}: ChatWriteForbiddenError - 账号冻结")
+                        return
+                    except errors.UserDeactivatedError:
+                        self.status = '❌ 账号已被停用'
+                        self.is_authorized = False
+                        self.real_group_count = 0
+                        return
+                    except errors.UserDeactivatedBanError:
+                        self.status = '❌ 账号已被封禁'
+                        self.is_authorized = False
+                        self.real_group_count = 0
+                        return
+                    except Exception as send_err:
+                        error_msg = str(send_err).lower()
+                        if 'frozen' in error_msg or 'deactivat' in error_msg or 'banned' in error_msg:
+                            self.status = '⚠️ 账号受限/冻结'
+                            self.is_authorized = False
+                            self.real_group_count = 0
+                            print(f"[DEBUG] {self.session_name}: 发送消息失败 - {send_err}")
+                            return
+                        else:
+                            # 其他错误，可能是FloodWait，继续检查
+                            print(f"[DEBUG] {self.session_name}: 发送消息出错（非冻结）- {send_err}")
+                    
+                    # 方法2: 检查User对象的restricted字段
                     if hasattr(me, 'restricted') and me.restricted:
                         self.status = '⚠️ 账号受限/冻结'
                         self.is_authorized = False
@@ -210,7 +248,7 @@ class AccountInfo:
                         print(f"[DEBUG] {self.session_name}: User.restricted = True")
                         return
                     
-                    # 方法2: 检查FullUser的restricted字段
+                    # 方法3: 检查FullUser的restricted字段
                     from telethon.tl.functions.users import GetFullUserRequest
                     try:
                         full_user = await client(GetFullUserRequest(me.id))
@@ -227,7 +265,7 @@ class AccountInfo:
                     except Exception as e:
                         print(f"[DEBUG] {self.session_name}: GetFullUserRequest失败 - {e}")
                     
-                    # 方法3: 尝试获取对话列表（被冻结的账号会报错）
+                    # 方法4: 尝试获取对话列表（被冻结的账号会报错）
                     dialogs = await client.get_dialogs(limit=1)
                     
                     # 统计真实群数量（只统计群组和超级群，不包括私聊和频道）
