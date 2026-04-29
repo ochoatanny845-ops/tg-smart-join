@@ -197,31 +197,31 @@ class SmartJoinGUI:
         """创建UI"""
         
         # 创建Notebook（标签页）
-        notebook = ttk.Notebook(self.root)
-        notebook.pack(fill=BOTH, expand=True, padx=5, pady=5)
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill=BOTH, expand=True, padx=5, pady=5)
         
         # 配置标签页样式（放大字体）
         style = ttk.Style()
         style.configure('TNotebook.Tab', font=('Arial', 12, 'bold'), padding=[15, 8])
         
         # 标签页1: 主界面
-        main_frame = Frame(notebook)
-        notebook.add(main_frame, text="🏠 主界面")
+        main_frame = Frame(self.notebook)
+        self.notebook.add(main_frame, text="🏠 主界面")
         self.setup_main_tab(main_frame)
         
         # 标签页2: 群链接管理
-        groups_frame = Frame(notebook)
-        notebook.add(groups_frame, text="📋 群链接管理")
+        groups_frame = Frame(self.notebook)
+        self.notebook.add(groups_frame, text="📋 群链接管理")
         self.setup_groups_tab(groups_frame)
         
         # 标签页3: 配置
-        config_frame = Frame(notebook)
-        notebook.add(config_frame, text="⚙️ 配置")
+        config_frame = Frame(self.notebook)
+        self.notebook.add(config_frame, text="⚙️ 配置")
         self.setup_config_tab(config_frame)
         
         # 标签页4: 统计
-        stats_frame = Frame(notebook)
-        notebook.add(stats_frame, text="📊 统计")
+        stats_frame = Frame(self.notebook)
+        self.notebook.add(stats_frame, text="📊 统计")
         self.setup_stats_tab(stats_frame)
     
     def setup_main_tab(self, parent):
@@ -776,6 +776,11 @@ class SmartJoinGUI:
         self.start_button.config(state=DISABLED)
         self.stop_button.config(state=NORMAL)
         
+        # 禁用标签页切换（防止加群时切换导致错误）
+        for i in range(self.notebook.index('end')):
+            if i != 0:  # 保持主界面可见，禁用其他标签页
+                self.notebook.tab(i, state='disabled')
+        
         # 在后台线程运行（避免阻塞GUI）
         import threading
         thread = threading.Thread(target=lambda: asyncio.run(self.run_join()), daemon=True)
@@ -786,6 +791,11 @@ class SmartJoinGUI:
         self.is_running = False
         self.start_button.config(state=NORMAL)
         self.stop_button.config(state=DISABLED)
+        
+        # 恢复标签页切换
+        for i in range(self.notebook.index('end')):
+            self.notebook.tab(i, state='normal')
+        
         self.log("⏸️  已停止", "WARNING")
     
     async def run_join(self):
