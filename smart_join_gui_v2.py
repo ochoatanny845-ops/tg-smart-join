@@ -1798,8 +1798,32 @@ class SmartJoinGUI:
     
     def setup_broadcast_tab(self, parent):
         """群发消息标签页"""
+        # 创建可滚动的Canvas
+        canvas = Canvas(parent)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # 绑定鼠标滚轮
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # 使用scrollable_frame作为父容器
+        parent_container = scrollable_frame
+        
         # 消息内容区
-        content_frame = LabelFrame(parent, text="📝 消息内容", 
+        content_frame = LabelFrame(parent_container, text="📝 消息内容", 
                                    font=self.font_menu, padx=10, pady=10)
         content_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
         
@@ -1829,7 +1853,7 @@ class SmartJoinGUI:
                font=("Arial", 10, "bold"), bg="#9E9E9E", fg="white").pack(side=LEFT, padx=2)
         
         # 发送目标
-        target_frame = LabelFrame(parent, text="🎯 发送目标", 
+        target_frame = LabelFrame(parent_container, text="🎯 发送目标", 
                                  font=self.font_menu, padx=10, pady=10)
         target_frame.pack(fill=X, padx=10, pady=5)
         
@@ -1840,7 +1864,7 @@ class SmartJoinGUI:
                    value="file", font=self.font_label).grid(row=1, column=0, sticky=W, pady=2)
         
         # 发送配置
-        config_frame = LabelFrame(parent, text="⚙️ 发送配置", 
+        config_frame = LabelFrame(parent_container, text="⚙️ 发送配置", 
                                  font=self.font_menu, padx=10, pady=10)
         config_frame.pack(fill=X, padx=10, pady=5)
         
@@ -1871,7 +1895,7 @@ class SmartJoinGUI:
         Entry(config_frame, textvariable=self.broadcast_threads_var, font=self.font_label, width=10).grid(row=4, column=1, pady=5)
         
         # 统计信息
-        stats_info_frame = LabelFrame(parent, text="📊 发送统计", 
+        stats_info_frame = LabelFrame(parent_container, text="📊 发送统计", 
                                      font=self.font_menu, padx=10, pady=10)
         stats_info_frame.pack(fill=X, padx=10, pady=5)
         
@@ -1885,7 +1909,7 @@ class SmartJoinGUI:
         self.broadcast_stat_failed.pack(side=LEFT, padx=10)
         
         # 操作按钮
-        btn_frame = Frame(parent)
+        btn_frame = Frame(parent_container)
         btn_frame.pack(fill=X, padx=10, pady=10)
         
         Button(btn_frame, text="▶️ 开始群发", font=self.font_button,
