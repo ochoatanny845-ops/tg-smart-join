@@ -1429,6 +1429,14 @@ class SmartJoinGUI:
     
     async def account_worker(self, session_name: str, groups: List[str], account_idx: int):
         """单个账号的加群任务"""
+        # 先检查账号是否授权（避免未授权账号等待）
+        account = next((acc for acc in self.accounts if acc.session_name == session_name), None)
+        if not account or not account.is_authorized:
+            self.log(f"❌ [{session_name}] 未授权，跳过", "ERROR")
+            self.total_failed += 1
+            self.stat_failed.config(text=f"失败: {self.total_failed}")
+            return
+        
         # 错开启动时间（避免所有账号同时请求）
         initial_delay = random.randint(Config.ACCOUNT_INTERVAL_MIN, Config.ACCOUNT_INTERVAL_MAX) * account_idx
         if initial_delay > 0:
@@ -1458,7 +1466,7 @@ class SmartJoinGUI:
                         continue  # 旧格式，跳过
                     
                     if other_session != session_name and link in other_groups:
-                        self.log(f"⏭️  [{session_name}] 跳过（已被{other_session}加入）: {link}", "INFO")
+                        # 只计数，不打印日志（减少刷屏）
                         skipped += 1
                         already_joined_by_others = True
                         break
