@@ -265,6 +265,14 @@ class AccountWorker:
             return (False, 'failed', f'限流 {e.seconds}秒')
         
         except Exception as e:
+            # 检查是否是审核群
+            error_msg = str(e)
+            if 'successfully requested to join' in error_msg.lower():
+                # 这是审核群，已发送加入请求
+                DataManager.mark_joined(link, self.session_name)  # 标记为已处理
+                self.stats['success'] += 1
+                return (True, 'success', '已申请入群，待审核 ⏳')
+            
             self.stats['failed'] += 1
             return (False, 'failed', f'{type(e).__name__}: {e}')
     

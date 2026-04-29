@@ -824,6 +824,15 @@ class SmartJoinGUI:
             return False
             
         except Exception as e:
+            # 检查是否是审核群
+            error_msg = str(e)
+            if 'successfully requested to join' in error_msg.lower():
+                # 这是审核群，已发送加入请求
+                self.log(f"✅ 已申请入群，待审核: {link} ⏳", "SUCCESS")
+                self.manager.mark_joined(link, group_title or 'Unknown')
+                self.manager.increment_daily_count()
+                return True
+            
             self.log(f"❌ 加入失败: {link} - {e}", "ERROR")
             return False
 
