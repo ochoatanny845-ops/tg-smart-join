@@ -253,10 +253,14 @@ class AccountInfo:
                             print(f"[DEBUG] {self.session_name}: 发送消息失败 - {send_err}")
                             return
                         
-                        # 检查是否是invalid peer错误（可能是Bot或Session问题）
+                        # 检查是否是invalid peer错误（冻结账号的常见表现！）
                         elif 'invalid peer' in error_msg or 'peer' in error_msg:
-                            # 跳过发送消息测试，继续其他检查
-                            print(f"[DEBUG] {self.session_name}: ⚠️ 无法发送消息（可能是Bot账号或Session问题），跳过此测试")
+                            # 冻结账号无法发送消息到任何地方，包括收藏夹
+                            self.status = '⚠️ 账号受限/冻结'
+                            self.is_authorized = False
+                            self.real_group_count = 0
+                            print(f"[DEBUG] {self.session_name}: invalid Peer错误 - 账号冻结")
+                            return
                         
                         else:
                             # 其他错误，可能是FloodWait，继续检查
