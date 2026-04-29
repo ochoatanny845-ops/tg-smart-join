@@ -210,8 +210,15 @@ class AccountInfo:
                         from datetime import datetime
                         test_msg = f"[测试] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                         msg = await client.send_message('me', test_msg)
-                        # 立即删除
+                        print(f"[DEBUG] {self.session_name}: ✅ 已发送测试消息到收藏夹")
+                        
+                        # 等待1秒，让用户能看到（可选）
+                        await asyncio.sleep(1)
+                        
+                        # 删除测试消息
                         await client.delete_messages('me', msg.id)
+                        print(f"[DEBUG] {self.session_name}: 🗑️ 已删除测试消息")
+                        
                         # 成功 → 账号正常
                         print(f"[DEBUG] {self.session_name}: 发送消息测试通过 - 账号正常")
                     except errors.ChatWriteForbiddenError:
