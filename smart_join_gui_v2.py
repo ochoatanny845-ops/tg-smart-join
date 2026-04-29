@@ -1407,7 +1407,7 @@ class SmartJoinGUI:
     def update_stats(self):
         """更新统计信息"""
         available = sum(1 for acc in self.accounts if acc.is_authorized)
-        selected = len(self.selected_broadcast_accounts)
+        selected = len(self.selected_accounts)  # 修复：应该用selected_accounts，不是selected_broadcast_accounts
         
         # 加载群数量
         groups = []
