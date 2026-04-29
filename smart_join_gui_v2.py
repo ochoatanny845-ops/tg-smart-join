@@ -200,15 +200,16 @@ class SmartJoinGUI:
         account_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
         
         # 账号表格
-        columns = ('选择', '手机号', '名字', '状态', '已加群数', 'Session文件')
+        columns = ('序号', '选择', '手机号', '名字', '状态', '已加群数', 'Session文件')
         self.account_tree = ttk.Treeview(account_frame, columns=columns, 
                                         show='headings', height=8)
         
         # 列宽
+        self.account_tree.column('序号', width=50, anchor=CENTER)
         self.account_tree.column('选择', width=50, anchor=CENTER)
         self.account_tree.column('手机号', width=120, anchor=CENTER)
         self.account_tree.column('名字', width=100, anchor=CENTER)
-        self.account_tree.column('状态', width=100, anchor=CENTER)
+        self.account_tree.column('状态', width=150, anchor=CENTER)
         self.account_tree.column('已加群数', width=100, anchor=CENTER)
         self.account_tree.column('Session文件', width=200, anchor=W)
         
@@ -246,6 +247,10 @@ class SmartJoinGUI:
         Button(account_btn_frame, text="❌ 全不选", font=self.font_button, 
                command=self.deselect_all_accounts, 
                bg="#9E9E9E", fg="white", width=10).pack(side=LEFT, padx=5)
+        
+        Button(account_btn_frame, text="🗑️ 删除失效", font=self.font_button, 
+               command=self.delete_invalid_accounts, 
+               bg="#f44336", fg="white", width=10).pack(side=LEFT, padx=5)
         
         # 统计信息
         stats_frame = LabelFrame(parent, text="📊 统计信息", 
@@ -487,7 +492,7 @@ class SmartJoinGUI:
         self.stats_text.insert('1.0', stats_text)
     
     async def load_accounts(self):
-        """加载所有账号信息"""
+        """加载所有账号信息（并发检查）"""
         self.log("🔍 扫描Session文件...", "INFO")
         
         # 清空表格
@@ -511,25 +516,38 @@ class SmartJoinGUI:
             return
         
         self.log(f"📂 发现 {len(session_files)} 个Session文件", "INFO")
+        self.log(f"🔄 并发检查账号（10线程）...", "INFO")
         
-        # 加载每个账号信息
+        # 并发加载账号信息
+        tasks = []
         for session_name in session_files:
             account = AccountInfo(session_name)
-            await account.load_info()
             self.accounts.append(account)
-            
-            # 添加到表格
+            tasks.append(account.load_info())
+        
+        # 并发执行（限制10个并发）
+        semaphore = asyncio.Semaphore(10)
+        
+        async def load_with_limit(task):
+            async with semaphore:
+                await task
+        
+        await asyncio.gather(*[load_with_limit(task) for task in tasks])
+        
+        # 添加到表格（带序号）
+        for idx, account in enumerate(self.accounts, start=1):
             values = (
-                '☐',  # 未选中
+                str(idx),  # 序号
+                '☐',      # 未选中
                 account.phone,
                 account.name,
                 account.status,
                 f"{account.joined_count}/{account.daily_limit}",
-                session_name
+                account.session_name
             )
-            self.account_tree.insert('', END, values=values, tags=(session_name,))
+            self.account_tree.insert('', END, values=values, tags=(account.session_name,))
             
-            self.log(f"✅ {account.phone} ({account.name}) - {account.status}", 
+            self.log(f"[{idx}] {account.phone} ({account.name}) - {account.status}", 
                     "SUCCESS" if account.is_authorized else "WARNING")
         
         # 更新统计
@@ -543,12 +561,12 @@ class SmartJoinGUI:
         
         # 切换选中状态
         current_values = list(self.account_tree.item(item)['values'])
-        if current_values[0] == '☐':
-            current_values[0] = '☑'
+        if current_values[1] == '☐':  # 注意：序号在索引0，选择框在索引1
+            current_values[1] = '☑'
             if session_name not in self.selected_accounts:
                 self.selected_accounts.append(session_name)
         else:
-            current_values[0] = '☐'
+            current_values[1] = '☐'
             if session_name in self.selected_accounts:
                 self.selected_accounts.remove(session_name)
         
@@ -560,7 +578,7 @@ class SmartJoinGUI:
         self.selected_accounts = []
         for item in self.account_tree.get_children():
             values = list(self.account_tree.item(item)['values'])
-            values[0] = '☑'
+            values[1] = '☑'  # 序号在0，选择框在1
             self.account_tree.item(item, values=values)
             session_name = self.account_tree.item(item)['tags'][0]
             self.selected_accounts.append(session_name)
@@ -571,9 +589,46 @@ class SmartJoinGUI:
         self.selected_accounts = []
         for item in self.account_tree.get_children():
             values = list(self.account_tree.item(item)['values'])
-            values[0] = '☐'
+            values[1] = '☐'  # 序号在0，选择框在1
             self.account_tree.item(item, values=values)
         self.update_stats()
+    
+    def delete_invalid_accounts(self):
+        """删除失效/未授权账号"""
+        # 找出所有失效账号
+        invalid_accounts = [acc for acc in self.accounts if not acc.is_authorized]
+        
+        if not invalid_accounts:
+            messagebox.showinfo("提示", "没有失效账号！")
+            return
+        
+        # 确认删除
+        msg = f"发现 {len(invalid_accounts)} 个失效账号：\n\n"
+        for acc in invalid_accounts[:10]:  # 最多显示10个
+            msg += f"  - {acc.phone} ({acc.name}) - {acc.status}\n"
+        if len(invalid_accounts) > 10:
+            msg += f"  ... 还有 {len(invalid_accounts) - 10} 个\n"
+        msg += f"\n确定要删除这些Session文件吗？"
+        
+        if not messagebox.askyesno("确认删除", msg):
+            return
+        
+        # 删除Session文件
+        deleted = 0
+        for acc in invalid_accounts:
+            session_file = os.path.join(Config.SESSIONS_DIR, acc.session_name + '.session')
+            try:
+                if os.path.exists(session_file):
+                    os.remove(session_file)
+                    deleted += 1
+                    self.log(f"🗑️ 已删除: {acc.phone} ({acc.session_name})", "WARNING")
+            except Exception as e:
+                self.log(f"❌ 删除失败: {acc.session_name} - {e}", "ERROR")
+        
+        self.log(f"✅ 已删除 {deleted} 个失效账号", "SUCCESS")
+        
+        # 重新加载
+        asyncio.run(self.load_accounts())
     
     def update_stats(self):
         """更新统计信息"""
