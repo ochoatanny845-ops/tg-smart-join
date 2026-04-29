@@ -200,9 +200,22 @@ class AccountInfo:
                 self.phone = f'+{me.phone}' if me.phone else '未知'
                 self.name = me.first_name or '未知'
                 
-                # 检查账号是否被冻结/限制
+                # 检查账号是否被限制/冻结
                 try:
-                    # 尝试获取对话列表（被冻结的账号会报错）
+                    # 方法1: 检查restricted字段（最准确）
+                    from telethon.tl.functions.users import GetFullUserRequest
+                    try:
+                        full_user = await client(GetFullUserRequest(me.id))
+                        if hasattr(full_user.full_user, 'restricted') and full_user.full_user.restricted:
+                            self.status = '⚠️ 账号受限/冻结'
+                            self.is_authorized = False
+                            self.real_group_count = 0
+                            print(f"[DEBUG] {self.session_name}: 检测到restricted标记")
+                            return  # 直接返回，不继续检查
+                    except Exception as e:
+                        print(f"[DEBUG] {self.session_name}: GetFullUserRequest失败 - {e}")
+                    
+                    # 方法2: 尝试获取对话列表（被冻结的账号会报错）
                     dialogs = await client.get_dialogs(limit=1)
                     
                     # 统计真实群数量（只统计群组和超级群，不包括私聊和频道）
@@ -380,36 +393,36 @@ class SmartJoinGUI:
         account_btn_frame = Frame(parent)
         account_btn_frame.pack(fill=X, padx=10, pady=5)
         
-        # 缩小按钮字体和尺寸
-        btn_font = ("Arial", 11, "bold")
+        # 按钮字体（稍微缩小，但确保文字显示完整）
+        btn_font = ("Arial", 10, "bold")
         
         Button(account_btn_frame, text="🔄 刷新列表", font=btn_font, 
                command=self.refresh_accounts_quick, 
-               bg="#2196F3", fg="white", width=10, height=1).pack(side=LEFT, padx=3)
+               bg="#2196F3", fg="white", width=11, height=1).pack(side=LEFT, padx=2)
         
         Button(account_btn_frame, text="🔍 检查状态", font=btn_font, 
                command=lambda: threading.Thread(target=lambda: asyncio.run(self.check_accounts_status()), daemon=True).start(), 
-               bg="#9C27B0", fg="white", width=10, height=1).pack(side=LEFT, padx=3)
+               bg="#9C27B0", fg="white", width=11, height=1).pack(side=LEFT, padx=2)
         
         Button(account_btn_frame, text="➕ 导入Session", font=btn_font, 
                command=self.import_session, 
-               bg="#4CAF50", fg="white", width=11, height=1).pack(side=LEFT, padx=3)
+               bg="#4CAF50", fg="white", width=13, height=1).pack(side=LEFT, padx=2)
         
         Button(account_btn_frame, text="✅ 全选", font=btn_font, 
                command=self.select_all_accounts, 
-               bg="#FF9800", fg="white", width=7, height=1).pack(side=LEFT, padx=3)
+               bg="#FF9800", fg="white", width=8, height=1).pack(side=LEFT, padx=2)
         
         Button(account_btn_frame, text="❌ 全不选", font=btn_font, 
                command=self.deselect_all_accounts, 
-               bg="#9E9E9E", fg="white", width=8, height=1).pack(side=LEFT, padx=3)
+               bg="#9E9E9E", fg="white", width=9, height=1).pack(side=LEFT, padx=2)
         
         Button(account_btn_frame, text="🗑️ 删除失效", font=btn_font, 
                command=self.delete_invalid_accounts, 
-               bg="#f44336", fg="white", width=9, height=1).pack(side=LEFT, padx=3)
+               bg="#f44336", fg="white", width=11, height=1).pack(side=LEFT, padx=2)
         
         Button(account_btn_frame, text="🔄 同步群数据", font=btn_font, 
                command=lambda: threading.Thread(target=lambda: asyncio.run(self.sync_group_data()), daemon=True).start(), 
-               bg="#00BCD4", fg="white", width=11, height=1).pack(side=LEFT, padx=3)
+               bg="#00BCD4", fg="white", width=13, height=1).pack(side=LEFT, padx=2)
         
         # 统计信息
         stats_frame = LabelFrame(parent, text="📊 统计信息", 
