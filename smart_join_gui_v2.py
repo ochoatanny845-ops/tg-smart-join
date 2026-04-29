@@ -584,18 +584,19 @@ class SmartJoinGUI:
         
         # 并发检查
         self.log(f"📡 开始连接Telegram服务器...", "INFO")
-        tasks = []
-        for account in self.accounts:
-            tasks.append(account.load_info())
         
+        # 使用信号量控制并发
         semaphore = asyncio.Semaphore(10)
         
-        async def check_with_limit(task):
+        async def check_one_account(account):
             async with semaphore:
-                await task
+                await account.load_info()
+        
+        # 创建任务列表
+        tasks = [check_one_account(account) for account in self.accounts]
         
         self.log(f"⏳ 并发执行 {len(tasks)} 个检查任务...", "INFO")
-        await asyncio.gather(*[check_with_limit(task) for task in tasks])
+        await asyncio.gather(*tasks)
         self.log(f"📥 所有任务完成，开始更新界面...", "INFO")
         
         # 统计
