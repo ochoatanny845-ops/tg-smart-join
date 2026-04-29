@@ -601,7 +601,7 @@ class SmartJoinGUI:
                                  font=self.font_menu, padx=10, pady=10)
         config_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
         
-        # 间隔设置
+        # 群间隔设置
         Label(config_frame, text="最小间隔(秒):", font=self.font_label).grid(row=0, column=0, sticky=W, pady=5)
         self.interval_min_var = IntVar(value=Config.INTERVAL_MIN)
         Entry(config_frame, textvariable=self.interval_min_var, font=self.font_label, width=10).grid(row=0, column=1, pady=5)
@@ -610,27 +610,36 @@ class SmartJoinGUI:
         self.interval_max_var = IntVar(value=Config.INTERVAL_MAX)
         Entry(config_frame, textvariable=self.interval_max_var, font=self.font_label, width=10).grid(row=1, column=1, pady=5)
         
-        Label(config_frame, text="批次大小:", font=self.font_label).grid(row=2, column=0, sticky=W, pady=5)
+        # 账号间隔设置（新增）
+        Label(config_frame, text="账号间隔最小(秒):", font=self.font_label).grid(row=2, column=0, sticky=W, pady=5)
+        self.account_interval_min_var = IntVar(value=Config.ACCOUNT_INTERVAL_MIN)
+        Entry(config_frame, textvariable=self.account_interval_min_var, font=self.font_label, width=10).grid(row=2, column=1, pady=5)
+        
+        Label(config_frame, text="账号间隔最大(秒):", font=self.font_label).grid(row=3, column=0, sticky=W, pady=5)
+        self.account_interval_max_var = IntVar(value=Config.ACCOUNT_INTERVAL_MAX)
+        Entry(config_frame, textvariable=self.account_interval_max_var, font=self.font_label, width=10).grid(row=3, column=1, pady=5)
+        
+        Label(config_frame, text="批次大小:", font=self.font_label).grid(row=4, column=0, sticky=W, pady=5)
         self.batch_size_var = IntVar(value=Config.BATCH_SIZE)
-        Entry(config_frame, textvariable=self.batch_size_var, font=self.font_label, width=10).grid(row=2, column=1, pady=5)
+        Entry(config_frame, textvariable=self.batch_size_var, font=self.font_label, width=10).grid(row=4, column=1, pady=5)
         
-        Label(config_frame, text="批次休息最小(秒):", font=self.font_label).grid(row=3, column=0, sticky=W, pady=5)
+        Label(config_frame, text="批次休息最小(秒):", font=self.font_label).grid(row=5, column=0, sticky=W, pady=5)
         self.batch_rest_min_var = IntVar(value=Config.BATCH_REST_MIN)
-        Entry(config_frame, textvariable=self.batch_rest_min_var, font=self.font_label, width=10).grid(row=3, column=1, pady=5)
+        Entry(config_frame, textvariable=self.batch_rest_min_var, font=self.font_label, width=10).grid(row=5, column=1, pady=5)
         
-        Label(config_frame, text="批次休息最大(秒):", font=self.font_label).grid(row=4, column=0, sticky=W, pady=5)
+        Label(config_frame, text="批次休息最大(秒):", font=self.font_label).grid(row=6, column=0, sticky=W, pady=5)
         self.batch_rest_max_var = IntVar(value=Config.BATCH_REST_MAX)
-        Entry(config_frame, textvariable=self.batch_rest_max_var, font=self.font_label, width=10).grid(row=4, column=1, pady=5)
+        Entry(config_frame, textvariable=self.batch_rest_max_var, font=self.font_label, width=10).grid(row=6, column=1, pady=5)
         
-        Label(config_frame, text="每日限额:", font=self.font_label).grid(row=5, column=0, sticky=W, pady=5)
+        Label(config_frame, text="每日限额:", font=self.font_label).grid(row=7, column=0, sticky=W, pady=5)
         self.daily_limit_var = IntVar(value=Config.DAILY_LIMIT)
-        Entry(config_frame, textvariable=self.daily_limit_var, font=self.font_label, width=10).grid(row=5, column=1, pady=5)
+        Entry(config_frame, textvariable=self.daily_limit_var, font=self.font_label, width=10).grid(row=7, column=1, pady=5)
         
         # 重复加群模式
-        Label(config_frame, text="重复加群模式:", font=self.font_label).grid(row=6, column=0, sticky=W, pady=5)
+        Label(config_frame, text="重复加群模式:", font=self.font_label).grid(row=8, column=0, sticky=W, pady=5)
         self.allow_duplicate_var = BooleanVar(value=Config.ALLOW_DUPLICATE)
         duplicate_frame = Frame(config_frame)
-        duplicate_frame.grid(row=6, column=1, sticky=W, pady=5)
+        duplicate_frame.grid(row=8, column=1, sticky=W, pady=5)
         Radiobutton(duplicate_frame, text="重复（所有号加所有群）", variable=self.allow_duplicate_var, 
                    value=True, font=self.font_label).pack(anchor=W)
         Radiobutton(duplicate_frame, text="不重复（每群只用一个号）", variable=self.allow_duplicate_var, 
@@ -638,7 +647,7 @@ class SmartJoinGUI:
         
         # 保存按钮
         Button(config_frame, text="💾 保存配置", font=self.font_button,
-               command=self.save_config, bg="#4CAF50", fg="white", width=15).grid(row=7, column=0, columnspan=2, pady=20)
+               command=self.save_config, bg="#4CAF50", fg="white", width=15).grid(row=9, column=0, columnspan=2, pady=20)
     
     def setup_stats_tab(self, parent):
         """统计标签页"""
@@ -717,6 +726,8 @@ class SmartJoinGUI:
         """保存配置"""
         Config.INTERVAL_MIN = self.interval_min_var.get()
         Config.INTERVAL_MAX = self.interval_max_var.get()
+        Config.ACCOUNT_INTERVAL_MIN = self.account_interval_min_var.get()  # 新增
+        Config.ACCOUNT_INTERVAL_MAX = self.account_interval_max_var.get()  # 新增
         Config.BATCH_SIZE = self.batch_size_var.get()
         Config.BATCH_REST_MIN = self.batch_rest_min_var.get()
         Config.BATCH_REST_MAX = self.batch_rest_max_var.get()
@@ -737,8 +748,8 @@ class SmartJoinGUI:
         self.refresh_stats()
         
         mode = "重复加群" if Config.ALLOW_DUPLICATE else "不重复加群"
-        self.log(f"✅ 配置已保存（模式: {mode}，每日限额: {Config.DAILY_LIMIT}）", "SUCCESS")
-        messagebox.showinfo("成功", f"配置已保存！\n模式: {mode}\n每日限额: {Config.DAILY_LIMIT}")
+        self.log(f"✅ 配置已保存（模式: {mode}，账号间隔: {Config.ACCOUNT_INTERVAL_MIN}-{Config.ACCOUNT_INTERVAL_MAX}秒）", "SUCCESS")
+        messagebox.showinfo("成功", f"配置已保存！\n模式: {mode}\n账号间隔: {Config.ACCOUNT_INTERVAL_MIN}-{Config.ACCOUNT_INTERVAL_MAX}秒")
     
     def refresh_stats(self):
         """刷新统计"""
