@@ -198,9 +198,42 @@ class AccountInfo:
                 me = await client.get_me()
                 self.phone = f'+{me.phone}' if me.phone else '未知'
                 self.name = me.first_name or '未知'
-                self.status = '✅ 正常'
-                self.is_authorized = True
-                print(f"[DEBUG] {self.session_name}: 授权成功 - {self.phone} ({self.name})")
+                
+                # 检查账号是否被冻结/限制
+                try:
+                    # 尝试获取对话列表（被冻结的账号会报错）
+                    dialogs = await client.get_dialogs(limit=1)
+                    
+                    # 检查是否有限制（通过尝试发送消息给自己）
+                    # 如果账号被限制，某些操作会抛出特定错误
+                    self.status = '✅ 正常'
+                    self.is_authorized = True
+                    
+                except errors.AuthKeyUnregisteredError:
+                    self.status = '❌ 账号已注销'
+                    self.is_authorized = False
+                    
+                except errors.UserDeactivatedError:
+                    self.status = '❌ 账号已被停用'
+                    self.is_authorized = False
+                    
+                except errors.UserDeactivatedBanError:
+                    self.status = '❌ 账号已被封禁'
+                    self.is_authorized = False
+                    
+                except Exception as check_error:
+                    # 如果是冻结相关的错误
+                    error_msg = str(check_error).lower()
+                    if 'frozen' in error_msg or 'banned' in error_msg or 'deactivated' in error_msg:
+                        self.status = '⚠️ 账号受限/冻结'
+                        self.is_authorized = False
+                    else:
+                        # 其他错误，可能是网络问题，先标记为正常
+                        self.status = '✅ 正常'
+                        self.is_authorized = True
+                        print(f"[DEBUG] {self.session_name}: 检查限制时出错 - {check_error}")
+                
+                print(f"[DEBUG] {self.session_name}: {self.status} - {self.phone} ({self.name})")
             else:
                 self.status = '❌ 未授权'
                 self.is_authorized = False
@@ -209,8 +242,24 @@ class AccountInfo:
             # 加载已加入群数
             self.joined_count = DataManager.get_joined_count(self.session_name)
             
+        except errors.AuthKeyUnregisteredError:
+            self.status = '❌ 账号已注销'
+            self.is_authorized = False
+            
+        except errors.UserDeactivatedError:
+            self.status = '❌ 账号已被停用'
+            self.is_authorized = False
+            
+        except errors.UserDeactivatedBanError:
+            self.status = '❌ 账号已被封禁'
+            self.is_authorized = False
+            
         except Exception as e:
-            self.status = f'❌ 错误: {e}'
+            error_msg = str(e).lower()
+            if 'frozen' in error_msg or 'banned' in error_msg or 'deactivated' in error_msg:
+                self.status = '⚠️ 账号受限/冻结'
+            else:
+                self.status = f'❌ 错误: {e}'
             self.is_authorized = False
             print(f"[DEBUG] {self.session_name}: 错误 - {e}")
         
