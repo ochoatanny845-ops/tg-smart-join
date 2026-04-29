@@ -380,33 +380,36 @@ class SmartJoinGUI:
         account_btn_frame = Frame(parent)
         account_btn_frame.pack(fill=X, padx=10, pady=5)
         
-        Button(account_btn_frame, text="🔄 刷新列表", font=self.font_button, 
+        # 缩小按钮字体和尺寸
+        btn_font = ("Arial", 11, "bold")
+        
+        Button(account_btn_frame, text="🔄 刷新列表", font=btn_font, 
                command=self.refresh_accounts_quick, 
-               bg="#2196F3", fg="white", width=12).pack(side=LEFT, padx=5)
+               bg="#2196F3", fg="white", width=10, height=1).pack(side=LEFT, padx=3)
         
-        Button(account_btn_frame, text="🔍 检查状态", font=self.font_button, 
+        Button(account_btn_frame, text="🔍 检查状态", font=btn_font, 
                command=lambda: threading.Thread(target=lambda: asyncio.run(self.check_accounts_status()), daemon=True).start(), 
-               bg="#9C27B0", fg="white", width=12).pack(side=LEFT, padx=5)
+               bg="#9C27B0", fg="white", width=10, height=1).pack(side=LEFT, padx=3)
         
-        Button(account_btn_frame, text="➕ 导入Session", font=self.font_button, 
+        Button(account_btn_frame, text="➕ 导入Session", font=btn_font, 
                command=self.import_session, 
-               bg="#4CAF50", fg="white", width=12).pack(side=LEFT, padx=5)
+               bg="#4CAF50", fg="white", width=11, height=1).pack(side=LEFT, padx=3)
         
-        Button(account_btn_frame, text="✅ 全选", font=self.font_button, 
+        Button(account_btn_frame, text="✅ 全选", font=btn_font, 
                command=self.select_all_accounts, 
-               bg="#FF9800", fg="white", width=10).pack(side=LEFT, padx=5)
+               bg="#FF9800", fg="white", width=7, height=1).pack(side=LEFT, padx=3)
         
-        Button(account_btn_frame, text="❌ 全不选", font=self.font_button, 
+        Button(account_btn_frame, text="❌ 全不选", font=btn_font, 
                command=self.deselect_all_accounts, 
-               bg="#9E9E9E", fg="white", width=10).pack(side=LEFT, padx=5)
+               bg="#9E9E9E", fg="white", width=8, height=1).pack(side=LEFT, padx=3)
         
-        Button(account_btn_frame, text="🗑️ 删除失效", font=self.font_button, 
+        Button(account_btn_frame, text="🗑️ 删除失效", font=btn_font, 
                command=self.delete_invalid_accounts, 
-               bg="#f44336", fg="white", width=10).pack(side=LEFT, padx=5)
+               bg="#f44336", fg="white", width=9, height=1).pack(side=LEFT, padx=3)
         
-        Button(account_btn_frame, text="🔄 同步群数据", font=self.font_button, 
+        Button(account_btn_frame, text="🔄 同步群数据", font=btn_font, 
                command=lambda: threading.Thread(target=lambda: asyncio.run(self.sync_group_data()), daemon=True).start(), 
-               bg="#00BCD4", fg="white", width=12).pack(side=LEFT, padx=5)
+               bg="#00BCD4", fg="white", width=11, height=1).pack(side=LEFT, padx=3)
         
         # 统计信息
         stats_frame = LabelFrame(parent, text="📊 统计信息", 
@@ -433,20 +436,23 @@ class SmartJoinGUI:
                                 font=self.font_label, fg="red")
         self.stat_failed.grid(row=0, column=4, padx=10)
         
-        # 控制按钮（缩小高度）
+        # 控制按钮（缩小尺寸）
         control_frame = Frame(parent)
         control_frame.pack(fill=X, padx=10, pady=5)
         
+        # 使用更小的字体
+        ctrl_btn_font = ("Arial", 11, "bold")
+        
         self.start_button = Button(control_frame, text="▶ 开始加群", 
-                                   font=self.font_button, 
+                                   font=ctrl_btn_font, 
                                    command=self.start_join, 
-                                   bg="#4CAF50", fg="white", width=12, height=1)
+                                   bg="#4CAF50", fg="white", width=10, height=1)
         self.start_button.pack(side=LEFT, padx=5)
         
         self.stop_button = Button(control_frame, text="⏸ 停止", 
-                                  font=self.font_button, 
+                                  font=ctrl_btn_font, 
                                   command=self.stop_join, 
-                                  bg="#f44336", fg="white", width=12, height=1, 
+                                  bg="#f44336", fg="white", width=8, height=1, 
                                   state=DISABLED)
         self.stop_button.pack(side=LEFT, padx=5)
         
