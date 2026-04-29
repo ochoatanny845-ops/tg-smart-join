@@ -1563,6 +1563,11 @@ class SmartJoinGUI:
                 self.log(f"❌ [{session_name}] 账号未授权，停止该账号的加群任务", "ERROR")
                 break
             
+            # 检查是否FloodWait过长
+            if result == 'FLOODWAIT':
+                self.log(f"⚠️ [{session_name}] FloodWait时间过长，停止该账号", "WARNING")
+                break
+            
             # 根据结果处理
             if result:
                 success += 1
@@ -1643,6 +1648,39 @@ class SmartJoinGUI:
             self.total_success += 1
             self.stat_success.config(text=f"成功: {self.total_success}")
             return True
+        
+        except errors.FloodWaitError as flood:
+            # FloodWait错误：Telegram要求等待
+            wait_seconds = flood.seconds
+            self.log(f"⚠️ [{session_name}] FloodWait: 需等待 {wait_seconds} 秒", "WARNING")
+            
+            if wait_seconds <= 120:  # 2分钟以内，自动等待
+                self.log(f"⏳ [{session_name}] 自动等待 {wait_seconds} 秒后重试...", "INFO")
+                await asyncio.sleep(wait_seconds + 5)  # 多等5秒保险
+                
+                # 重试加群
+                try:
+                    if parsed['type'] == 'invite':
+                        await client(ImportChatInviteRequest(parsed['hash']))
+                    else:
+                        await client(JoinChannelRequest(parsed['username']))
+                    
+                    DataManager.mark_joined(session_name, link)
+                    self.log(f"✅ [{session_name}] 重试成功: {link}", "SUCCESS")
+                    self.remove_group_link(link)
+                    self.total_success += 1
+                    self.stat_success.config(text=f"成功: {self.total_success}")
+                    return True
+                except Exception as retry_err:
+                    self.log(f"❌ [{session_name}] 重试失败: {link} - {retry_err}", "ERROR")
+                    self.total_failed += 1
+                    self.stat_failed.config(text=f"失败: {self.total_failed}")
+                    return False
+            else:  # 超过2分钟，跳过这个账号
+                self.log(f"❌ [{session_name}] FloodWait时间过长({wait_seconds}秒)，跳过该账号", "ERROR")
+                self.total_failed += 1
+                self.stat_failed.config(text=f"失败: {self.total_failed}")
+                return 'FLOODWAIT'  # 返回特殊值，通知worker停止该账号
         
         except Exception as e:
             error_msg = str(e)
