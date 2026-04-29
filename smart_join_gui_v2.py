@@ -196,6 +196,10 @@ class SmartJoinGUI:
         self.selected_accounts = []  # 选中的账号
         self.is_running = False
         
+        # 统计计数器
+        self.total_success = 0
+        self.total_failed = 0
+        
         # 创建UI
         self.setup_ui()
         
@@ -314,20 +318,28 @@ class SmartJoinGUI:
                                 font=self.font_label, fg="orange")
         self.stat_groups.grid(row=0, column=2, padx=10)
         
-        # 控制按钮
+        self.stat_success = Label(stats_frame, text="成功: 0", 
+                                 font=self.font_label, fg="green")
+        self.stat_success.grid(row=0, column=3, padx=10)
+        
+        self.stat_failed = Label(stats_frame, text="失败: 0", 
+                                font=self.font_label, fg="red")
+        self.stat_failed.grid(row=0, column=4, padx=10)
+        
+        # 控制按钮（缩小高度）
         control_frame = Frame(parent)
         control_frame.pack(fill=X, padx=10, pady=5)
         
         self.start_button = Button(control_frame, text="▶ 开始加群", 
                                    font=self.font_button, 
                                    command=self.start_join, 
-                                   bg="#4CAF50", fg="white", width=15, height=2)
+                                   bg="#4CAF50", fg="white", width=12, height=1)
         self.start_button.pack(side=LEFT, padx=5)
         
         self.stop_button = Button(control_frame, text="⏸ 停止", 
                                   font=self.font_button, 
                                   command=self.stop_join, 
-                                  bg="#f44336", fg="white", width=15, height=2, 
+                                  bg="#f44336", fg="white", width=12, height=1, 
                                   state=DISABLED)
         self.stop_button.pack(side=LEFT, padx=5)
         
@@ -849,6 +861,12 @@ class SmartJoinGUI:
     
     async def run_join(self):
         """运行加群任务（并发模式）"""
+        # 重置计数器
+        self.total_success = 0
+        self.total_failed = 0
+        self.stat_success.config(text="成功: 0")
+        self.stat_failed.config(text="失败: 0")
+        
         self.log("=" * 60, "INFO")
         self.log(f"🚀 开始加群！使用 {len(self.selected_accounts)} 个账号（并发）", "INFO")
         self.log(f"🔍 调试: selected_accounts = {self.selected_accounts}", "INFO")
@@ -980,12 +998,16 @@ class SmartJoinGUI:
             DataManager.mark_joined(session_name, link)
             self.log(f"✅ [{session_name}] 成功加入: {link}", "SUCCESS")
             self.remove_group_link(link)  # 删除已加入的群链接
+            self.total_success += 1
+            self.stat_success.config(text=f"成功: {self.total_success}")
             return True
         
         except errors.UserAlreadyParticipantError:
             DataManager.mark_joined(session_name, link)
             self.log(f"ℹ️  [{session_name}] 已在群里: {link}", "INFO")
             self.remove_group_link(link)  # 删除已加入的群链接
+            self.total_success += 1
+            self.stat_success.config(text=f"成功: {self.total_success}")
             return True
         
         except Exception as e:
@@ -994,6 +1016,8 @@ class SmartJoinGUI:
                 DataManager.mark_joined(session_name, link)
                 self.log(f"✅ [{session_name}] 已申请入群，待审核: {link} ⏳", "SUCCESS")
                 self.remove_group_link(link)  # 删除已申请的群链接
+                self.total_success += 1
+                self.stat_success.config(text=f"成功: {self.total_success}")
                 return True
             
             # 判断是否是永久失败（删除链接）
@@ -1003,6 +1027,8 @@ class SmartJoinGUI:
             else:
                 self.log(f"❌ [{session_name}] 失败（临时）: {link} - {e}", "ERROR")
             
+            self.total_failed += 1
+            self.stat_failed.config(text=f"失败: {self.total_failed}")
             return False
         
         finally:
