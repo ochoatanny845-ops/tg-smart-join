@@ -366,6 +366,10 @@ class SmartJoinGUI:
         Button(toolbar, text="🗑️ 清空", font=self.font_button,
                command=self.clear_groups, bg="#f44336", fg="white", width=10).pack(side=LEFT, padx=5)
         
+        # 数量显示
+        self.groups_count_label = Label(toolbar, text="📊 群链接数: 0", font=self.font_button, fg="blue")
+        self.groups_count_label.pack(side=RIGHT, padx=10)
+        
         # 群链接文本框
         groups_frame = LabelFrame(parent, text="📋 群链接列表 (每行一个)", 
                                  font=self.font_menu, padx=5, pady=5)
@@ -435,8 +439,12 @@ class SmartJoinGUI:
         """加载群链接到文本框"""
         if os.path.exists(Config.GROUPS_FILE):
             with open(Config.GROUPS_FILE, 'r', encoding='utf-8') as f:
+                content = f.read()
                 self.groups_text.delete('1.0', END)
-                self.groups_text.insert('1.0', f.read())
+                self.groups_text.insert('1.0', content)
+        
+        # 更新数量显示
+        self.update_groups_count()
     
     def import_groups(self):
         """导入群链接"""
@@ -451,6 +459,7 @@ class SmartJoinGUI:
                     content = f.read()
                 self.groups_text.delete('1.0', END)
                 self.groups_text.insert('1.0', content)
+                self.update_groups_count()
                 self.log("✅ 导入群链接成功", "SUCCESS")
             except Exception as e:
                 self.log(f"❌ 导入失败: {e}", "ERROR")
@@ -461,15 +470,24 @@ class SmartJoinGUI:
         try:
             with open(Config.GROUPS_FILE, 'w', encoding='utf-8') as f:
                 f.write(content)
+            self.update_groups_count()
             self.log("✅ 保存成功", "SUCCESS")
             self.update_stats()
         except Exception as e:
             self.log(f"❌ 保存失败: {e}", "ERROR")
     
+    def update_groups_count(self):
+        """更新群链接数量显示"""
+        content = self.groups_text.get('1.0', END)
+        lines = [line.strip() for line in content.split('\n') if line.strip() and not line.startswith('#')]
+        count = len(lines)
+        self.groups_count_label.config(text=f"📊 群链接数: {count}")
+    
     def clear_groups(self):
         """清空群链接"""
         if messagebox.askyesno("确认", "确定要清空所有群链接吗？"):
             self.groups_text.delete('1.0', END)
+            self.update_groups_count()
             self.log("⚠️ 群链接已清空（未保存）", "WARNING")
     
     def save_config(self):
@@ -885,6 +903,7 @@ class SmartJoinGUI:
         # 类型检查
         if not isinstance(session_name, str):
             self.log(f"❌ 错误: session_name类型错误 ({type(session_name)}): {session_name}", "ERROR")
+            self.remove_group_link(link)  # 删除失效链接
             return False
         
         session_path = os.path.join(Config.SESSIONS_DIR, session_name)
@@ -901,6 +920,7 @@ class SmartJoinGUI:
             parsed = GroupLinkParser.parse_link(link)
             if not parsed:
                 self.log(f"⚠️  [{session_name}] 无法解析: {link}", "WARNING")
+                self.remove_group_link(link)  # 删除失效链接
                 return False
             
             # 尝试加入
@@ -912,11 +932,13 @@ class SmartJoinGUI:
             # 成功
             DataManager.mark_joined(session_name, link)
             self.log(f"✅ [{session_name}] 成功加入: {link}", "SUCCESS")
+            self.remove_group_link(link)  # 删除已加入的群链接
             return True
         
         except errors.UserAlreadyParticipantError:
             DataManager.mark_joined(session_name, link)
             self.log(f"ℹ️  [{session_name}] 已在群里: {link}", "INFO")
+            self.remove_group_link(link)  # 删除已加入的群链接
             return True
         
         except Exception as e:
@@ -924,13 +946,44 @@ class SmartJoinGUI:
             if 'successfully requested to join' in error_msg.lower():
                 DataManager.mark_joined(session_name, link)
                 self.log(f"✅ [{session_name}] 已申请入群，待审核: {link} ⏳", "SUCCESS")
+                self.remove_group_link(link)  # 删除已申请的群链接
                 return True
             
-            self.log(f"❌ [{session_name}] 失败: {link} - {e}", "ERROR")
+            # 判断是否是永久失败（删除链接）
+            if any(keyword in error_msg.lower() for keyword in ['not found', 'invalid', 'private', 'banned']):
+                self.log(f"❌ [{session_name}] 失败（永久）: {link} - {e}", "ERROR")
+                self.remove_group_link(link)  # 删除失效链接
+            else:
+                self.log(f"❌ [{session_name}] 失败（临时）: {link} - {e}", "ERROR")
+            
             return False
         
         finally:
             await client.disconnect()
+    
+    def remove_group_link(self, link: str):
+        """从groups.txt删除群链接"""
+        try:
+            if not os.path.exists(Config.GROUPS_FILE):
+                return
+            
+            with open(Config.GROUPS_FILE, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # 过滤掉要删除的链接
+            new_lines = [line for line in lines if line.strip() != link.strip()]
+            
+            with open(Config.GROUPS_FILE, 'w', encoding='utf-8') as f:
+                f.writelines(new_lines)
+            
+            # 更新GUI中的群链接文本框（如果存在）
+            if hasattr(self, 'groups_text'):
+                self.groups_text.delete('1.0', END)
+                self.groups_text.insert('1.0', ''.join(new_lines))
+                self.update_groups_count()
+        
+        except Exception as e:
+            print(f"删除群链接失败: {e}")
     
     def log(self, message: str, level: str = "INFO"):
         """输出日志"""
