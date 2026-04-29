@@ -124,6 +124,15 @@ class SmartJoinManager:
 class GroupLinkParser:
     @staticmethod
     def parse_link(link: str) -> Optional[Dict]:
+        """解析群链接
+        
+        支持格式：
+        1. https://t.me/+XXXXX - 邀请链接（推荐）
+        2. https://t.me/joinchat/XXXXX - 邀请链接（旧格式）
+        3. https://t.me/username - 公开群
+        4. @username - 公开群
+        5. tg://join?invite=XXXXX - App邀请链接
+        """
         link = link.strip()
         
         # 私有群邀请链接 (joinchat)
@@ -133,6 +142,11 @@ class GroupLinkParser:
         
         # 私有群邀请链接 (+ 格式)
         match = re.match(r'https?://t\.me/\+([A-Za-z0-9_-]+)', link)
+        if match:
+            return {'type': 'invite', 'hash': match.group(1)}
+        
+        # App邀请链接 (tg://join?invite=XXXXX)
+        match = re.match(r'tg://join\?invite=([A-Za-z0-9_-]+)', link)
         if match:
             return {'type': 'invite', 'hash': match.group(1)}
         
@@ -783,8 +797,14 @@ class SmartJoinGUI:
                         return False
                         
                 except errors.UsernameNotOccupiedError:
-                    self.log(f"❌ 用户名不存在: @{parsed['username']}", "ERROR")
-                    self.log(f"💡 建议使用邀请链接格式: https://t.me/+XXXXX", "WARNING")
+                    self.log(f"❌ 用户名不存在或群组已私有: @{parsed['username']}", "ERROR")
+                    self.log(f"💡 可能原因：", "WARNING")
+                    self.log(f"   1. 群组禁用了公开链接（已设为私有）", "WARNING")
+                    self.log(f"   2. 需要邀请链接才能加入", "WARNING")
+                    self.log(f"💡 解决方法：", "WARNING")
+                    self.log(f"   1. 用主账号打开群组 → 点击群名 → '邀请链接'", "WARNING")
+                    self.log(f"   2. 复制邀请链接（https://t.me/+XXXXX）", "WARNING")
+                    self.log(f"   3. 替换当前的 @{parsed['username']} 链接", "WARNING")
                     return False
                 except errors.UsernameInvalidError:
                     self.log(f"❌ 用户名格式无效: @{parsed['username']}", "ERROR")
