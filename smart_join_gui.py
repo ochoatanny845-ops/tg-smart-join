@@ -590,17 +590,25 @@ class SmartJoinGUI:
         try:
             # 启动客户端
             session_path = os.path.join(Config.SESSIONS_DIR, self.session_var.get())
+            self.log(f"📱 正在连接Telegram...", "INFO")
             self.client = TelegramClient(session_path, Config.API_ID, Config.API_HASH)
             
             await self.client.connect()
             
             if not await self.client.is_user_authorized():
                 self.log("❌ Session未授权！", "ERROR")
-                messagebox.showerror("错误", "Session未授权，请先登录！")
+                messagebox.showerror("错误", "Session未授权，请重新登录或更换Session文件！")
                 return
             
-            me = await self.client.get_me()
-            self.log(f"✅ 登录成功: {me.first_name} (@{me.username or 'None'})", "SUCCESS")
+            # 获取账号信息（添加异常处理）
+            try:
+                me = await self.client.get_me()
+                phone = me.phone if me.phone else "未知"
+                username = me.username if me.username else "无"
+                self.log(f"✅ 登录成功: {me.first_name} (@{username}) +{phone}", "SUCCESS")
+            except Exception as e:
+                self.log(f"⚠️ 无法获取账号信息: {e}", "WARNING")
+                self.log(f"⚠️ 继续尝试加群...", "WARNING")
             
             # 读取群链接
             content = self.groups_text.get('1.0', END).strip()
