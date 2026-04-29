@@ -586,9 +586,15 @@ class SmartJoinGUI:
     
     async def check_accounts_status(self):
         """检查所有账号状态（并发10线程）"""
-        self.log(f"🔍 检查账号状态（10线程并发）... 总计: {len(self.accounts)} 个账号", "INFO")
+        # 如果有选中的账号，只检查选中的；否则检查全部
+        if self.selected_accounts:
+            accounts_to_check = [acc for acc in self.accounts if acc.session_name in self.selected_accounts]
+            self.log(f"🔍 检查选中的账号状态（10线程并发）... 选中: {len(accounts_to_check)} 个", "INFO")
+        else:
+            accounts_to_check = self.accounts
+            self.log(f"🔍 检查所有账号状态（10线程并发）... 总计: {len(accounts_to_check)} 个账号", "INFO")
         
-        if not self.accounts:
+        if not accounts_to_check:
             self.log("⚠️  没有账号需要检查！", "WARNING")
             return
         
@@ -603,7 +609,7 @@ class SmartJoinGUI:
                 await account.load_info()
         
         # 创建任务列表
-        tasks = [check_one_account(account) for account in self.accounts]
+        tasks = [check_one_account(account) for account in accounts_to_check]
         
         self.log(f"⏳ 并发执行 {len(tasks)} 个检查任务...", "INFO")
         await asyncio.gather(*tasks)
