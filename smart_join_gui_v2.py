@@ -30,6 +30,7 @@ class Config:
     GROUPS_FILE = 'groups.txt'
     JOINED_FILE = 'joined.json'
     CONFIG_FILE = 'config.json'  # 配置文件
+    BROADCAST_RECORDS_FILE = 'broadcast_records.json'  # 群发记录文件
     
     # 每个账号加群后的间隔（秒）
     INTERVAL_MIN = 30
@@ -388,6 +389,8 @@ class SmartJoinGUI:
         self.broadcast_total_failed = 0
         self.broadcast_groups = []  # 已加入的群组列表
         self.selected_broadcast_groups = []  # 选中的群组
+        self.current_broadcast_record = {}  # 当前群发记录
+        self.broadcast_records = self.load_broadcast_records()  # 历史记录
         
         # 加载保存的配置
         Config.load_config()
@@ -2033,6 +2036,22 @@ class SmartJoinGUI:
         self.broadcast_total_failed = 0
         self.is_broadcasting = True
         
+        # 初始化当前记录
+        self.current_broadcast_record = {
+            'start_time': datetime.now().isoformat(),
+            'end_time': None,
+            'message': message[:100],  # 只保存前100字符
+            'image': self.broadcast_image_path.get() if self.broadcast_image_path.get() else None,
+            'target_mode': target_mode,
+            'accounts': self.selected_accounts.copy(),
+            'total_groups': 0,
+            'sent': 0,
+            'success': 0,
+            'failed': 0,
+            'success_groups': [],
+            'failed_groups': []
+        }
+        
         # 获取目标群组列表
         target_mode = self.broadcast_target_var.get()
         target_groups = []
@@ -2077,9 +2096,18 @@ class SmartJoinGUI:
         # 开始群发
         await self.broadcast_to_groups_new(target_groups, message)
         
-        self.log("=" * 60, "INFO")
-        self.log("✅ 群发完成！", "SUCCESS")
-        self.log("=" * 60, "INFO")
+        # 保存记录
+        self.current_broadcast_record['end_time'] = datetime.now().isoformat()
+        self.current_broadcast_record['total_groups'] = len(target_groups)
+        self.current_broadcast_record['sent'] = self.broadcast_total_sent
+        self.current_broadcast_record['success'] = self.broadcast_total_success
+        self.current_broadcast_record['failed'] = self.broadcast_total_failed
+        self.save_broadcast_record(self.current_broadcast_record)
+        
+        self.broadcast_log("=" * 60, "INFO")
+        self.broadcast_log("✅ 群发完成！", "SUCCESS")
+        self.broadcast_log(f"📊 统计: 发送{self.broadcast_total_sent}, 成功{self.broadcast_total_success}, 失败{self.broadcast_total_failed}", "INFO")
+        self.broadcast_log("=" * 60, "INFO")
     
     async def broadcast_to_groups_new(self, target_groups, message):
         """新版群发（支持多账号并发）"""
@@ -2222,7 +2250,9 @@ class SmartJoinGUI:
                 # 纯文本
                 await client.send_message(target, message)
             
-            self.log(f"✅ [{session_name}] 发送成功: {group_name}", "SUCCESS")
+            self.broadcast_log(f"✅ [{session_name}] 发送成功: {group_name}", "SUCCESS")
+            # 记录成功的群
+            self.current_broadcast_record['success_groups'].append(group_name)
             return True
         
         except errors.FloodWaitError as flood:
@@ -2254,7 +2284,9 @@ class SmartJoinGUI:
         
         except Exception as e:
             group_name = group_info.get('name', group_info.get('link', '未知'))
-            self.log(f"❌ [{session_name}] 发送失败: {group_name} - {e}", "ERROR")
+            self.broadcast_log(f"❌ [{session_name}] 发送失败: {group_name} - {e}", "ERROR")
+            # 记录失败的群
+            self.current_broadcast_record['failed_groups'].append({'group': group_name, 'error': str(e)})
             return False
     
     async def broadcast_to_groups(self, groups, message):
@@ -2462,6 +2494,25 @@ class SmartJoinGUI:
         self.broadcast_log_text.insert(END, f"[{timestamp}] {message}\n", level)
         self.broadcast_log_text.see(END)
         self.root.update()
+    
+    def load_broadcast_records(self):
+        """加载群发记录"""
+        if os.path.exists(Config.BROADCAST_RECORDS_FILE):
+            try:
+                with open(Config.BROADCAST_RECORDS_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except:
+                return []
+        return []
+    
+    def save_broadcast_record(self, record):
+        """保存群发记录"""
+        self.broadcast_records.append(record)
+        try:
+            with open(Config.BROADCAST_RECORDS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.broadcast_records, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            self.broadcast_log(f"❌ 保存记录失败: {e}", "ERROR")
     
     def log(self, message: str, level: str = "INFO"):
         """输出日志"""
