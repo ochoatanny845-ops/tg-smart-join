@@ -381,6 +381,12 @@ class SmartJoinGUI:
         self.total_success = 0
         self.total_failed = 0
         
+        # 群发功能变量
+        self.is_broadcasting = False
+        self.broadcast_total_sent = 0
+        self.broadcast_total_success = 0
+        self.broadcast_total_failed = 0
+        
         # 加载保存的配置
         Config.load_config()
         
@@ -420,6 +426,11 @@ class SmartJoinGUI:
         stats_frame = Frame(self.notebook)
         self.notebook.add(stats_frame, text="📊 统计")
         self.setup_stats_tab(stats_frame)
+        
+        # 标签页5: 群发消息（新增）
+        broadcast_frame = Frame(self.notebook)
+        self.notebook.add(broadcast_frame, text="📤 群发消息")
+        self.setup_broadcast_tab(broadcast_frame)
     
     def setup_main_tab(self, parent):
         """主界面标签页"""
@@ -1784,6 +1795,267 @@ class SmartJoinGUI:
         
         except Exception as e:
             print(f"删除群链接失败: {e}")
+    
+    def setup_broadcast_tab(self, parent):
+        """群发消息标签页"""
+        # 消息内容区
+        content_frame = LabelFrame(parent, text="📝 消息内容", 
+                                   font=self.font_menu, padx=10, pady=10)
+        content_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
+        
+        Label(content_frame, text="消息文本:", font=self.font_label).grid(row=0, column=0, sticky=W, pady=5)
+        self.broadcast_text = Text(content_frame, height=6, width=60, font=self.font_label)
+        self.broadcast_text.grid(row=1, column=0, columnspan=2, sticky=W+E, padx=5, pady=5)
+        
+        # 变量支持
+        self.broadcast_use_variables_var = BooleanVar(value=True)
+        Checkbutton(content_frame, text="支持变量 (群名:{group_name}, 序号:{index}, 时间:{time})", 
+                   variable=self.broadcast_use_variables_var, font=self.font_label).grid(row=2, column=0, sticky=W, pady=2)
+        
+        # 随机改写
+        self.broadcast_random_rewrite_var = BooleanVar(value=False)
+        Checkbutton(content_frame, text="随机改写（每条消息轻微变化）", 
+                   variable=self.broadcast_random_rewrite_var, font=self.font_label).grid(row=3, column=0, sticky=W, pady=2)
+        
+        # 图片选择
+        Label(content_frame, text="图片（可选）:", font=self.font_label).grid(row=4, column=0, sticky=W, pady=5)
+        self.broadcast_image_path = StringVar()
+        image_frame = Frame(content_frame)
+        image_frame.grid(row=5, column=0, sticky=W+E, pady=5)
+        Entry(image_frame, textvariable=self.broadcast_image_path, width=40, font=self.font_label).pack(side=LEFT, padx=2)
+        Button(image_frame, text="选择图片", command=self.select_broadcast_image, 
+               font=("Arial", 10, "bold"), bg="#2196F3", fg="white").pack(side=LEFT, padx=2)
+        Button(image_frame, text="清除", command=lambda: self.broadcast_image_path.set(""), 
+               font=("Arial", 10, "bold"), bg="#9E9E9E", fg="white").pack(side=LEFT, padx=2)
+        
+        # 发送目标
+        target_frame = LabelFrame(parent, text="🎯 发送目标", 
+                                 font=self.font_menu, padx=10, pady=10)
+        target_frame.pack(fill=X, padx=10, pady=5)
+        
+        self.broadcast_target_var = StringVar(value="joined")
+        Radiobutton(target_frame, text="所有已加入的群组", variable=self.broadcast_target_var, 
+                   value="joined", font=self.font_label).grid(row=0, column=0, sticky=W, pady=2)
+        Radiobutton(target_frame, text="群列表文件（groups.txt）", variable=self.broadcast_target_var, 
+                   value="file", font=self.font_label).grid(row=1, column=0, sticky=W, pady=2)
+        
+        # 发送配置
+        config_frame = LabelFrame(parent, text="⚙️ 发送配置", 
+                                 font=self.font_menu, padx=10, pady=10)
+        config_frame.pack(fill=X, padx=10, pady=5)
+        
+        Label(config_frame, text="间隔时间(秒):", font=self.font_label).grid(row=0, column=0, sticky=W, pady=5)
+        self.broadcast_interval_min_var = IntVar(value=30)
+        Entry(config_frame, textvariable=self.broadcast_interval_min_var, font=self.font_label, width=10).grid(row=0, column=1, pady=5)
+        Label(config_frame, text="-", font=self.font_label).grid(row=0, column=2, pady=5)
+        self.broadcast_interval_max_var = IntVar(value=90)
+        Entry(config_frame, textvariable=self.broadcast_interval_max_var, font=self.font_label, width=10).grid(row=0, column=3, pady=5)
+        
+        Label(config_frame, text="每日限额(条/账号):", font=self.font_label).grid(row=1, column=0, sticky=W, pady=5)
+        self.broadcast_daily_limit_var = IntVar(value=100)
+        Entry(config_frame, textvariable=self.broadcast_daily_limit_var, font=self.font_label, width=10).grid(row=1, column=1, pady=5)
+        
+        Label(config_frame, text="批次大小:", font=self.font_label).grid(row=2, column=0, sticky=W, pady=5)
+        self.broadcast_batch_size_var = IntVar(value=10)
+        Entry(config_frame, textvariable=self.broadcast_batch_size_var, font=self.font_label, width=10).grid(row=2, column=1, pady=5)
+        
+        Label(config_frame, text="批次休息(秒):", font=self.font_label).grid(row=3, column=0, sticky=W, pady=5)
+        self.broadcast_batch_rest_min_var = IntVar(value=300)
+        Entry(config_frame, textvariable=self.broadcast_batch_rest_min_var, font=self.font_label, width=10).grid(row=3, column=1, pady=5)
+        Label(config_frame, text="-", font=self.font_label).grid(row=3, column=2, pady=5)
+        self.broadcast_batch_rest_max_var = IntVar(value=600)
+        Entry(config_frame, textvariable=self.broadcast_batch_rest_max_var, font=self.font_label, width=10).grid(row=3, column=3, pady=5)
+        
+        Label(config_frame, text="并发线程:", font=self.font_label).grid(row=4, column=0, sticky=W, pady=5)
+        self.broadcast_threads_var = IntVar(value=10)
+        Entry(config_frame, textvariable=self.broadcast_threads_var, font=self.font_label, width=10).grid(row=4, column=1, pady=5)
+        
+        # 统计信息
+        stats_info_frame = LabelFrame(parent, text="📊 发送统计", 
+                                     font=self.font_menu, padx=10, pady=10)
+        stats_info_frame.pack(fill=X, padx=10, pady=5)
+        
+        self.broadcast_stat_sent = Label(stats_info_frame, text="已发送: 0/0", font=self.font_label, fg="blue")
+        self.broadcast_stat_sent.pack(side=LEFT, padx=10)
+        
+        self.broadcast_stat_success = Label(stats_info_frame, text="成功: 0", font=self.font_label, fg="green")
+        self.broadcast_stat_success.pack(side=LEFT, padx=10)
+        
+        self.broadcast_stat_failed = Label(stats_info_frame, text="失败: 0", font=self.font_label, fg="red")
+        self.broadcast_stat_failed.pack(side=LEFT, padx=10)
+        
+        # 操作按钮
+        btn_frame = Frame(parent)
+        btn_frame.pack(fill=X, padx=10, pady=10)
+        
+        Button(btn_frame, text="▶️ 开始群发", font=self.font_button,
+               command=lambda: threading.Thread(target=lambda: asyncio.run(self.start_broadcast()), daemon=True).start(),
+               bg="#4CAF50", fg="white", width=12, height=1).pack(side=LEFT, padx=5)
+        
+        Button(btn_frame, text="⏹️ 停止", font=self.font_button,
+               command=self.stop_broadcast,
+               bg="#F44336", fg="white", width=12, height=1).pack(side=LEFT, padx=5)
+    
+    def select_broadcast_image(self):
+        """选择群发图片"""
+        from tkinter import filedialog
+        filepath = filedialog.askopenfilename(
+            title="选择图片",
+            filetypes=[("图片文件", "*.jpg *.jpeg *.png *.gif *.bmp"), ("所有文件", "*.*")]
+        )
+        if filepath:
+            self.broadcast_image_path.set(filepath)
+            self.log(f"✅ 已选择图片: {filepath}", "SUCCESS")
+    
+    async def start_broadcast(self):
+        """开始群发"""
+        # 获取消息内容
+        message = self.broadcast_text.get('1.0', END).strip()
+        if not message and not self.broadcast_image_path.get():
+            messagebox.showerror("错误", "请输入消息内容或选择图片！")
+            return
+        
+        # 检查选中的账号
+        if not self.selected_accounts:
+            messagebox.showerror("错误", "请先选择要使用的账号！")
+            return
+        
+        self.log("=" * 60, "INFO")
+        self.log("📤 开始群发消息...", "INFO")
+        self.log("=" * 60, "INFO")
+        
+        # 重置统计
+        self.broadcast_total_sent = 0
+        self.broadcast_total_success = 0
+        self.broadcast_total_failed = 0
+        self.is_broadcasting = True
+        
+        # 获取目标群组列表
+        target_mode = self.broadcast_target_var.get()
+        
+        if target_mode == "joined":
+            # 从已加入的群组
+            self.log("🎯 目标: 所有已加入的群组", "INFO")
+            # TODO: 实现获取已加入群组的逻辑
+            messagebox.showinfo("提示", "此功能正在开发中...")
+            return
+        elif target_mode == "file":
+            # 从groups.txt
+            if not os.path.exists(Config.GROUPS_FILE):
+                messagebox.showerror("错误", f"未找到群列表文件: {Config.GROUPS_FILE}")
+                return
+            
+            with open(Config.GROUPS_FILE, 'r', encoding='utf-8') as f:
+                groups = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+            
+            if not groups:
+                messagebox.showerror("错误", "群列表为空！")
+                return
+            
+            self.log(f"🎯 目标: 群列表文件，共 {len(groups)} 个群", "INFO")
+            
+            # 开始群发
+            await self.broadcast_to_groups(groups, message)
+        
+        self.log("=" * 60, "INFO")
+        self.log("✅ 群发完成！", "SUCCESS")
+        self.log("=" * 60, "INFO")
+    
+    async def broadcast_to_groups(self, groups, message):
+        """向群组列表群发消息"""
+        for idx, group_link in enumerate(groups, start=1):
+            if not self.is_broadcasting:
+                self.log("⏹️ 群发已停止", "WARNING")
+                break
+            
+            # 替换变量
+            if self.broadcast_use_variables_var.get():
+                msg = message.replace("{index}", str(idx))
+                msg = msg.replace("{time}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                msg = msg.replace("{group_name}", group_link.split('/')[-1])  # 临时用链接末尾作为群名
+            else:
+                msg = message
+            
+            # 随机改写
+            if self.broadcast_random_rewrite_var.get():
+                import random
+                emojis = ['😊', '👋', '✨', '🌟', '💫', '🎉', '🔥', '💪']
+                msg += f" {random.choice(emojis)}"
+            
+            # 发送
+            success = await self.send_message_to_group(group_link, msg)
+            
+            if success:
+                self.broadcast_total_success += 1
+                self.broadcast_stat_success.config(text=f"成功: {self.broadcast_total_success}")
+            else:
+                self.broadcast_total_failed += 1
+                self.broadcast_stat_failed.config(text=f"失败: {self.broadcast_total_failed}")
+            
+            self.broadcast_total_sent += 1
+            self.broadcast_stat_sent.config(text=f"已发送: {self.broadcast_total_sent}/{len(groups)}")
+            
+            # 间隔
+            if idx < len(groups):
+                interval = random.randint(
+                    self.broadcast_interval_min_var.get(),
+                    self.broadcast_interval_max_var.get()
+                )
+                self.log(f"⏰ 等待 {interval} 秒...", "INFO")
+                await asyncio.sleep(interval)
+    
+    async def send_message_to_group(self, group_link, message):
+        """向单个群组发送消息"""
+        # 使用第一个选中的账号（简化版，后续可改为轮换）
+        if not self.selected_accounts:
+            return False
+        
+        session_name = self.selected_accounts[0]
+        session_path = os.path.join(Config.SESSIONS_DIR, session_name)
+        client = TelegramClient(session_path, Config.API_ID, Config.API_HASH)
+        
+        try:
+            await client.connect()
+            
+            if not await client.is_user_authorized():
+                self.log(f"❌ [{session_name}] 未授权", "ERROR")
+                return False
+            
+            # 解析群链接
+            parsed = GroupLinkParser.parse_link(group_link)
+            if not parsed:
+                self.log(f"⚠️ 无法解析: {group_link}", "WARNING")
+                return False
+            
+            # 发送消息
+            if self.broadcast_image_path.get():
+                # 有图片
+                await client.send_message(
+                    parsed['username'] if parsed['type'] == 'username' else parsed['hash'],
+                    message,
+                    file=self.broadcast_image_path.get()
+                )
+            else:
+                # 纯文本
+                await client.send_message(
+                    parsed['username'] if parsed['type'] == 'username' else parsed['hash'],
+                    message
+                )
+            
+            self.log(f"✅ 发送成功: {group_link}", "SUCCESS")
+            return True
+        
+        except Exception as e:
+            self.log(f"❌ 发送失败: {group_link} - {e}", "ERROR")
+            return False
+        
+        finally:
+            await client.disconnect()
+    
+    def stop_broadcast(self):
+        """停止群发"""
+        self.is_broadcasting = False
+        self.log("⏹️ 正在停止群发...", "WARNING")
     
     def log(self, message: str, level: str = "INFO"):
         """输出日志"""
