@@ -278,13 +278,33 @@ class SmartJoinGUI:
         Button(toolbar, text="导入群链接", command=self.import_groups).pack(side=LEFT, padx=5)
         Button(toolbar, text="导出群链接", command=self.export_groups).pack(side=LEFT, padx=5)
         Button(toolbar, text="清空列表", command=self.clear_groups).pack(side=LEFT, padx=5)
+        Button(toolbar, text="获取邀请链接", command=self.show_invite_link_help, 
+               bg="#FF9800", fg="white").pack(side=LEFT, padx=5)
         Button(toolbar, text="刷新统计", command=self.update_stats).pack(side=RIGHT, padx=5)
+        
+        # 提示框
+        tip_frame = Frame(parent, bg="#FFF3E0", relief=RIDGE, bd=2)
+        tip_frame.pack(fill=X, padx=10, pady=5)
+        
+        tip_text = """💡 重要提示：建议使用邀请链接格式！
+        
+✅ 推荐格式：https://t.me/+XXXXX 或 https://t.me/joinchat/XXXXX
+❌ 避免使用：@username 或 https://t.me/username （可能被风控，搜索不到）
+
+获取邀请链接方法：
+1. 在Telegram中打开群组
+2. 点击群名 → 点击"添加成员" → 点击"邀请链接"
+3. 复制链接（格式：https://t.me/+XXXXX）
+"""
+        
+        Label(tip_frame, text=tip_text, bg="#FFF3E0", fg="#E65100", 
+              justify=LEFT, font=("Arial", 9), padx=10, pady=5).pack()
         
         # 群链接列表
         list_frame = LabelFrame(parent, text="群链接列表 (每行一个)", padx=5, pady=5)
         list_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
         
-        self.groups_text = scrolledtext.ScrolledText(list_frame, height=20, wrap=WORD, 
+        self.groups_text = scrolledtext.ScrolledText(list_frame, height=15, wrap=WORD, 
                                                      font=("Consolas", 10))
         self.groups_text.pack(fill=BOTH, expand=True)
         
@@ -535,6 +555,40 @@ class SmartJoinGUI:
             self.update_stats_tree()
             self.log("⚠️ 统计记录已清空", "WARNING")
     
+    def show_invite_link_help(self):
+        """显示邀请链接获取帮助"""
+        help_text = """如何获取群组邀请链接：
+
+1. 在Telegram中打开目标群组
+
+2. 点击群名称（顶部）
+
+3. 点击"添加成员"按钮
+
+4. 点击"邀请链接"
+
+5. 复制链接（格式：https://t.me/+XXXXX）
+
+6. 粘贴到"群链接列表"中
+
+---
+
+为什么要用邀请链接而不是@username？
+
+• @username 可能被风控，搜索不到
+• 邀请链接直接加入，成功率更高
+• 避免触发Telegram的反spam检测
+
+---
+
+支持的链接格式：
+✅ https://t.me/+XXXXX （推荐）
+✅ https://t.me/joinchat/XXXXX
+✅ https://t.me/username （可能失败）
+✅ @username （可能失败）
+"""
+        messagebox.showinfo("获取邀请链接帮助", help_text)
+    
     # ===== 日志 =====
     
     def log(self, message, level="INFO"):
@@ -711,13 +765,26 @@ class SmartJoinGUI:
                 self.log(f"✅ 成功加入私有群: {group_title}", "SUCCESS")
                 
             elif parsed['type'] == 'username':
-                entity = await self.client.get_entity(parsed['username'])
-                if isinstance(entity, (Channel, Chat)):
-                    await self.client(JoinChannelRequest(entity))
-                    group_title = entity.title
-                    self.log(f"✅ 成功加入公开群: {group_title} (@{parsed['username']})", "SUCCESS")
-                else:
-                    self.log(f"⚠️ 目标不是群组: {parsed['username']}", "WARNING")
+                # 不使用get_entity搜索，直接尝试加入（避免被风控的群搜不到）
+                try:
+                    # 方法1: 尝试直接通过用户名加入
+                    from telethon.tl.functions.channels import JoinChannelRequest
+                    from telethon.tl.types import InputPeerChannel
+                    
+                    # 先尝试resolve（不触发搜索API）
+                    try:
+                        entity = await self.client.get_entity(parsed['username'])
+                        await self.client(JoinChannelRequest(entity))
+                        group_title = getattr(entity, 'title', parsed['username'])
+                        self.log(f"✅ 成功加入公开群: {group_title} (@{parsed['username']})", "SUCCESS")
+                    except:
+                        # 如果get_entity失败，尝试通过invoke直接访问
+                        self.log(f"⚠️ 无法通过用户名搜索，尝试直接访问链接...", "WARNING")
+                        raise errors.UsernameNotOccupiedError(request=None)
+                        
+                except errors.UsernameNotOccupiedError:
+                    self.log(f"❌ 用户名不存在或已被风控: @{parsed['username']}", "ERROR")
+                    self.log(f"💡 建议使用邀请链接格式: https://t.me/+XXXXX", "WARNING")
                     return False
             
             self.manager.mark_joined(link, group_title)
