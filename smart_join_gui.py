@@ -765,26 +765,29 @@ class SmartJoinGUI:
                 self.log(f"✅ 成功加入私有群: {group_title}", "SUCCESS")
                 
             elif parsed['type'] == 'username':
-                # 不使用get_entity搜索，直接尝试加入（避免被风控的群搜不到）
+                # 使用ResolveUsernameRequest替代get_entity，避免搜索问题
+                from telethon.tl.functions.contacts import ResolveUsernameRequest
+                
                 try:
-                    # 方法1: 尝试直接通过用户名加入
-                    from telethon.tl.functions.channels import JoinChannelRequest
-                    from telethon.tl.types import InputPeerChannel
+                    # 直接解析用户名为实体
+                    result = await self.client(ResolveUsernameRequest(parsed['username']))
                     
-                    # 先尝试resolve（不触发搜索API）
-                    try:
-                        entity = await self.client.get_entity(parsed['username'])
-                        await self.client(JoinChannelRequest(entity))
-                        group_title = getattr(entity, 'title', parsed['username'])
+                    if result.chats:
+                        chat = result.chats[0]
+                        # 加入频道/群组
+                        await self.client(JoinChannelRequest(chat))
+                        group_title = getattr(chat, 'title', parsed['username'])
                         self.log(f"✅ 成功加入公开群: {group_title} (@{parsed['username']})", "SUCCESS")
-                    except:
-                        # 如果get_entity失败，尝试通过invoke直接访问
-                        self.log(f"⚠️ 无法通过用户名搜索，尝试直接访问链接...", "WARNING")
-                        raise errors.UsernameNotOccupiedError(request=None)
+                    else:
+                        self.log(f"⚠️ 未找到群组: @{parsed['username']}", "WARNING")
+                        return False
                         
                 except errors.UsernameNotOccupiedError:
-                    self.log(f"❌ 用户名不存在或已被风控: @{parsed['username']}", "ERROR")
+                    self.log(f"❌ 用户名不存在: @{parsed['username']}", "ERROR")
                     self.log(f"💡 建议使用邀请链接格式: https://t.me/+XXXXX", "WARNING")
+                    return False
+                except errors.UsernameInvalidError:
+                    self.log(f"❌ 用户名格式无效: @{parsed['username']}", "ERROR")
                     return False
             
             self.manager.mark_joined(link, group_title)
