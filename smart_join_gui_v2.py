@@ -303,7 +303,8 @@ class AccountInfo:
                     
                     # 统计真实群数量（只统计群组和超级群，不包括私聊和频道）
                     all_dialogs = await client.get_dialogs()
-                    self.real_group_count = sum(1 for d in all_dialogs if d.is_group or d.is_channel)
+                    # 只统计群组，不统计频道
+                    self.real_group_count = sum(1 for d in all_dialogs if d.is_group and not d.is_channel)
                     
                     self.status = '✅ 正常'
                     self.is_authorized = True
