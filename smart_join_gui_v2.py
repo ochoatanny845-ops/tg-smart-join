@@ -793,10 +793,6 @@ class SmartJoinGUI:
             # 转换auth_key为base64
             auth_key = base64.b64encode(auth_key_bytes).decode('utf-8')
             
-            # 获取server_salt（如果存在）
-            cursor.execute("SELECT data FROM sessions LIMIT 1")
-            session_data = cursor.fetchone()
-            
             conn.close()
             
             # 构造认证数据（参考Chrome扩展格式）
