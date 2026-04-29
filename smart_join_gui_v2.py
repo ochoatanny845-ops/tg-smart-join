@@ -2085,6 +2085,10 @@ class SmartJoinGUI:
         self.broadcast_total_failed = 0
         self.is_broadcasting = True
         
+        # 获取目标群组列表（必须在使用前定义）
+        target_mode = self.broadcast_target_var.get()
+        target_groups = []
+        
         # 初始化当前记录
         self.current_broadcast_record = {
             'start_time': datetime.now().isoformat(),
@@ -2100,10 +2104,6 @@ class SmartJoinGUI:
             'success_groups': [],
             'failed_groups': []
         }
-        
-        # 获取目标群组列表
-        target_mode = self.broadcast_target_var.get()
-        target_groups = []
         
         if target_mode == "joined":
             # 所有已加入的群组
