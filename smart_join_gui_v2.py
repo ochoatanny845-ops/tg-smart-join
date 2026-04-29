@@ -1419,10 +1419,19 @@ class SmartJoinGUI:
         self.log(f"📋 待加入群数: {len(groups)}", "INFO")
         self.log(f"🔀 并发模式: {len(self.selected_accounts)} 个账号同时工作", "INFO")
         
+        # 不重复模式：使用共享群队列
+        if not Config.ALLOW_DUPLICATE:
+            self.log("📌 不重复模式：每个群只用一个账号加", "INFO")
+            self.remaining_groups = list(groups)  # 共享的待加群队列
+            self.group_lock = asyncio.Lock()  # 线程锁
+        
         # 为每个账号创建任务
         tasks = []
         for account_idx, session_name in enumerate(self.selected_accounts):
-            task = self.account_worker(session_name, groups, account_idx)
+            if Config.ALLOW_DUPLICATE:
+                task = self.account_worker(session_name, groups, account_idx)
+            else:
+                task = self.account_worker_no_duplicate(session_name, account_idx)
             tasks.append(task)
         
         # 并发执行所有账号
@@ -1510,6 +1519,78 @@ class SmartJoinGUI:
         if not Config.ALLOW_DUPLICATE and skipped > 0:
             summary += f", 跳过: {skipped}"
         self.log(summary, "SUCCESS")
+    
+    async def account_worker_no_duplicate(self, session_name: str, account_idx: int):
+        """不重复模式的账号worker（从共享群池中取群）"""
+        # 先检查账号是否授权
+        account = next((acc for acc in self.accounts if acc.session_name == session_name), None)
+        if not account or not account.is_authorized:
+            self.log(f"❌ [{session_name}] 未授权，跳过", "ERROR")
+            self.total_failed += 1
+            self.stat_failed.config(text=f"失败: {self.total_failed}")
+            return
+        
+        # 错开启动时间
+        initial_delay = random.randint(Config.ACCOUNT_INTERVAL_MIN, Config.ACCOUNT_INTERVAL_MAX) * account_idx
+        if initial_delay > 0:
+            self.log(f"⏳ [{session_name}] 等待 {initial_delay} 秒后开始...", "INFO")
+            await asyncio.sleep(initial_delay)
+        
+        self.log(f"🚀 [{session_name}] 开始加群！", "INFO")
+        
+        success = 0
+        failed = 0
+        
+        while True:
+            if not self.is_running:
+                self.log(f"⏸️  [{session_name}] 已停止", "WARNING")
+                break
+            
+            # 从共享群池中取一个群（线程安全）
+            async with self.group_lock:
+                if not self.remaining_groups:
+                    # 群加完了！
+                    self.log(f"✅ [{session_name}] 群池已空，停止", "SUCCESS")
+                    break
+                
+                link = self.remaining_groups[0]  # 取第一个群
+            
+            # 加入群
+            result = await self.join_group(session_name, link)
+            
+            # 检查账号是否死了
+            if result == 'UNAUTHORIZED':
+                self.log(f"❌ [{session_name}] 账号未授权，停止该账号的加群任务", "ERROR")
+                break
+            
+            # 根据结果处理
+            if result:
+                success += 1
+                # 成功 → 从群池删除这个群
+                async with self.group_lock:
+                    if link in self.remaining_groups:
+                        self.remaining_groups.remove(link)
+                        self.log(f"📌 [{session_name}] 群已加入，从池中移除: {link}", "INFO")
+            else:
+                failed += 1
+                # 失败 → 也从群池删除（避免其他账号重复失败）
+                async with self.group_lock:
+                    if link in self.remaining_groups:
+                        self.remaining_groups.remove(link)
+                        self.log(f"⚠️ [{session_name}] 加群失败，从池中移除: {link}", "WARNING")
+            
+            # 检查群池是否为空
+            async with self.group_lock:
+                if not self.remaining_groups:
+                    self.log(f"✅ [{session_name}] 所有群已处理完毕", "SUCCESS")
+                    break
+            
+            # 智能间隔
+            interval = random.randint(Config.INTERVAL_MIN, Config.INTERVAL_MAX)
+            self.log(f"⏰ [{session_name}] 等待 {interval} 秒...", "INFO")
+            await asyncio.sleep(interval)
+        
+        self.log(f"✅ [{session_name}] 完成！成功: {success}, 失败: {failed}", "SUCCESS")
     
     async def join_group(self, session_name: str, link: str) -> bool:
         """单个账号加入群"""
