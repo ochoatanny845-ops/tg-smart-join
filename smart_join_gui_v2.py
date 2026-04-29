@@ -128,6 +128,13 @@ class AccountInfo:
     async def load_info(self):
         """加载账号信息"""
         session_path = os.path.join(Config.SESSIONS_DIR, self.session_name)
+        
+        # 检查session文件是否存在
+        if not os.path.exists(session_path + '.session'):
+            self.status = '❌ 文件不存在'
+            self.is_authorized = False
+            return
+        
         client = TelegramClient(session_path, Config.API_ID, Config.API_HASH)
         
         try:
@@ -565,13 +572,14 @@ class SmartJoinGUI:
     
     async def check_accounts_status(self):
         """检查所有账号状态（并发10线程）"""
-        self.log("🔍 检查账号状态（10线程并发）...", "INFO")
+        self.log(f"🔍 检查账号状态（10线程并发）... 总计: {len(self.accounts)} 个账号", "INFO")
         
         if not self.accounts:
             self.log("⚠️  没有账号需要检查！", "WARNING")
             return
         
         # 并发检查
+        self.log(f"📡 开始连接Telegram服务器...", "INFO")
         tasks = []
         for account in self.accounts:
             tasks.append(account.load_info())
@@ -582,7 +590,9 @@ class SmartJoinGUI:
             async with semaphore:
                 await task
         
+        self.log(f"⏳ 并发执行 {len(tasks)} 个检查任务...", "INFO")
         await asyncio.gather(*[check_with_limit(task) for task in tasks])
+        self.log(f"📥 所有任务完成，开始更新界面...", "INFO")
         
         # 统计
         total = len(self.accounts)
