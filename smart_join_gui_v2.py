@@ -29,6 +29,7 @@ class Config:
     SESSIONS_DIR = 'sessions'
     GROUPS_FILE = 'groups.txt'
     JOINED_FILE = 'joined.json'
+    CONFIG_FILE = 'config.json'  # 配置文件
     
     # 每个账号加群后的间隔（秒）
     INTERVAL_MIN = 30
@@ -45,6 +46,45 @@ class Config:
     
     # 重复加群模式
     ALLOW_DUPLICATE = True  # True=所有账号加所有群，False=每个群只用一个账号
+    
+    @classmethod
+    def load_config(cls):
+        """从文件加载配置"""
+        if os.path.exists(cls.CONFIG_FILE):
+            try:
+                with open(cls.CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    cls.INTERVAL_MIN = config.get('interval_min', cls.INTERVAL_MIN)
+                    cls.INTERVAL_MAX = config.get('interval_max', cls.INTERVAL_MAX)
+                    cls.ACCOUNT_INTERVAL_MIN = config.get('account_interval_min', cls.ACCOUNT_INTERVAL_MIN)
+                    cls.ACCOUNT_INTERVAL_MAX = config.get('account_interval_max', cls.ACCOUNT_INTERVAL_MAX)
+                    cls.BATCH_SIZE = config.get('batch_size', cls.BATCH_SIZE)
+                    cls.BATCH_REST_MIN = config.get('batch_rest_min', cls.BATCH_REST_MIN)
+                    cls.BATCH_REST_MAX = config.get('batch_rest_max', cls.BATCH_REST_MAX)
+                    cls.DAILY_LIMIT = config.get('daily_limit', cls.DAILY_LIMIT)
+                    cls.ALLOW_DUPLICATE = config.get('allow_duplicate', cls.ALLOW_DUPLICATE)
+            except Exception as e:
+                print(f"加载配置失败: {e}")
+    
+    @classmethod
+    def save_config(cls):
+        """保存配置到文件"""
+        try:
+            config = {
+                'interval_min': cls.INTERVAL_MIN,
+                'interval_max': cls.INTERVAL_MAX,
+                'account_interval_min': cls.ACCOUNT_INTERVAL_MIN,
+                'account_interval_max': cls.ACCOUNT_INTERVAL_MAX,
+                'batch_size': cls.BATCH_SIZE,
+                'batch_rest_min': cls.BATCH_REST_MIN,
+                'batch_rest_max': cls.BATCH_REST_MAX,
+                'daily_limit': cls.DAILY_LIMIT,
+                'allow_duplicate': cls.ALLOW_DUPLICATE
+            }
+            with open(cls.CONFIG_FILE, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"保存配置失败: {e}")
 
 # ===== 链接解析 =====
 class GroupLinkParser:
@@ -199,6 +239,9 @@ class SmartJoinGUI:
         # 统计计数器
         self.total_success = 0
         self.total_failed = 0
+        
+        # 加载保存的配置
+        Config.load_config()
         
         # 创建UI
         self.setup_ui()
@@ -527,6 +570,9 @@ class SmartJoinGUI:
         Config.BATCH_REST_MAX = self.batch_rest_max_var.get()
         Config.DAILY_LIMIT = self.daily_limit_var.get()
         Config.ALLOW_DUPLICATE = self.allow_duplicate_var.get()
+        
+        # 保存到文件（持久化）
+        Config.save_config()
         
         # 更新所有账号的daily_limit
         for account in self.accounts:
