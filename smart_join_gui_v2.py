@@ -993,7 +993,6 @@ class SmartJoinGUI:
         
         self.log("=" * 60, "INFO")
         self.log(f"🚀 开始加群！使用 {len(self.selected_accounts)} 个账号（并发）", "INFO")
-        self.log(f"🔍 调试: selected_accounts = {self.selected_accounts}", "INFO")
         self.log("=" * 60, "INFO")
         
         # 加载群列表
