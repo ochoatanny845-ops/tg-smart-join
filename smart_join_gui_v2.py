@@ -2453,27 +2453,8 @@ class SmartJoinGUI:
         self.broadcast_groups = []
         
         # 使用第一个选中的账号
-        session_name = self.selected_broadcast_accounts[0]
-        
-        # 保护性检查：如果是int，说明选择逻辑有问题，尝试从tags获取
-        if isinstance(session_name, int):
-            self.broadcast_log(f"⚠️ 检测到索引错误，尝试修复...", "WARNING")
-            # 尝试从tree的第session_name项获取真实的session_name
-            try:
-                items = list(self.broadcast_accounts_tree.get_children())
-                if session_name < len(items):
-                    session_name = self.broadcast_accounts_tree.item(items[session_name])['tags'][0]
-                    self.broadcast_log(f"✅ 已修复，使用账号: {session_name}", "INFO")
-                else:
-                    self.broadcast_log(f"❌ 修复失败：索引超出范围", "ERROR")
-                    messagebox.showerror("错误", "账号选择错误，请重新刷新账号列表并选择！")
-                    return
-            except Exception as e:
-                self.broadcast_log(f"❌ 修复失败：{e}", "ERROR")
-                messagebox.showerror("错误", f"账号选择错误：{e}\n请重新刷新账号列表并选择！")
-                return
-        
-        self.broadcast_log(f"📱 使用账号: {session_name}", "INFO")
+        session_name = str(self.selected_broadcast_accounts[0])  # 强制转换为字符串
+        self.broadcast_log(f"📱 使用账号: {session_name} (类型: {type(session_name).__name__})", "INFO")
         
         session_path = os.path.join(Config.SESSIONS_DIR, session_name)
         client = TelegramClient(session_path, Config.API_ID, Config.API_HASH)
@@ -2590,17 +2571,25 @@ class SmartJoinGUI:
         if not item:
             return
         
-        session_name = self.broadcast_accounts_tree.item(item)['tags'][0]
+        # 从tags获取session_name（字符串）
+        tags = self.broadcast_accounts_tree.item(item)['tags']
+        if not tags:
+            self.broadcast_log("❌ 账号数据错误，请重新刷新账号列表", "ERROR")
+            return
+            
+        session_name = str(tags[0])  # 强制转换为字符串
         current_values = list(self.broadcast_accounts_tree.item(item)['values'])
         
         if current_values[0] == '☐':
             current_values[0] = '☑'
             if session_name not in self.selected_broadcast_accounts:
                 self.selected_broadcast_accounts.append(session_name)
+                self.broadcast_log(f"✅ 已选择账号: {session_name} (类型: {type(session_name).__name__})", "INFO")
         else:
             current_values[0] = '☐'
             if session_name in self.selected_broadcast_accounts:
                 self.selected_broadcast_accounts.remove(session_name)
+                self.broadcast_log(f"➖ 已取消选择: {session_name}", "INFO")
         
         self.broadcast_accounts_tree.item(item, values=current_values)
     
@@ -2608,12 +2597,16 @@ class SmartJoinGUI:
         """全选账号"""
         self.selected_broadcast_accounts = []
         for item in self.broadcast_accounts_tree.get_children():
-            session_name = self.broadcast_accounts_tree.item(item)['tags'][0]
+            tags = self.broadcast_accounts_tree.item(item)['tags']
+            if not tags:
+                continue
+            session_name = str(tags[0])  # 强制转换为字符串
             values = list(self.broadcast_accounts_tree.item(item)['values'])
             values[0] = '☑'
             self.broadcast_accounts_tree.item(item, values=values)
             self.selected_broadcast_accounts.append(session_name)
         self.broadcast_log(f"✅ 已全选 {len(self.selected_broadcast_accounts)} 个账号", "INFO")
+        self.broadcast_log(f"📋 账号列表类型: {[type(x).__name__ for x in self.selected_broadcast_accounts]}", "DEBUG")
     
     def deselect_all_broadcast_accounts(self):
         """全不选账号"""
