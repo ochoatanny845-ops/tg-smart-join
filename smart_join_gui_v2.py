@@ -143,10 +143,11 @@ class SmartJoinGUI:
         self.root.geometry("1000x700")
         
         # 放大字体
-        self.font_label = ("Arial", 11)
-        self.font_button = ("Arial", 14, "bold")
-        self.font_menu = ("Arial", 12)
-        self.font_log = ("Consolas", 10)
+        self.font_label = ("Arial", 12)         # 标签字体
+        self.font_button = ("Arial", 14, "bold") # 按钮字体
+        self.font_menu = ("Arial", 13, "bold")   # 菜单/标题字体
+        self.font_log = ("Consolas", 11)        # 日志字体
+        self.font_tab = ("Arial", 12, "bold")    # 标签页字体
         
         # 数据
         self.accounts = []  # AccountInfo列表
@@ -165,6 +166,10 @@ class SmartJoinGUI:
         # 创建Notebook（标签页）
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill=BOTH, expand=True, padx=5, pady=5)
+        
+        # 配置标签页样式（放大字体）
+        style = ttk.Style()
+        style.configure('TNotebook.Tab', font=('Arial', 12, 'bold'), padding=[15, 8])
         
         # 标签页1: 主界面
         main_frame = Frame(notebook)
