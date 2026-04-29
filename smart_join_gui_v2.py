@@ -389,6 +389,7 @@ class SmartJoinGUI:
         self.broadcast_total_failed = 0
         self.broadcast_groups = []  # 已加入的群组列表
         self.selected_broadcast_groups = []  # 选中的群组
+        self.selected_broadcast_accounts = []  # 选中的账号（群发用）
         self.current_broadcast_record = {}  # 当前群发记录
         self.broadcast_records = self.load_broadcast_records()  # 历史记录
         
@@ -1222,10 +1223,10 @@ class SmartJoinGUI:
                 selected_infos.append(f"  - {account.phone} ({account.name}) - {account.status}")
         
         # 确认删除
-        msg = f"确定要删除以下 {len(self.selected_accounts)} 个账号吗？\n\n"
+        msg = f"确定要删除以下 {len(self.selected_broadcast_accounts)} 个账号吗？\n\n"
         msg += "\n".join(selected_infos[:15])  # 最多显示15个
-        if len(self.selected_accounts) > 15:
-            msg += f"\n  ... 还有 {len(self.selected_accounts) - 15} 个"
+        if len(self.selected_broadcast_accounts) > 15:
+            msg += f"\n  ... 还有 {len(self.selected_broadcast_accounts) - 15} 个"
         msg += "\n\n⚠️ 这将删除Session文件，无法恢复！"
         
         if not messagebox.askyesno("确认删除", msg):
@@ -1395,7 +1396,7 @@ class SmartJoinGUI:
     def update_stats(self):
         """更新统计信息"""
         available = sum(1 for acc in self.accounts if acc.is_authorized)
-        selected = len(self.selected_accounts)
+        selected = len(self.selected_broadcast_accounts)
         
         # 加载群数量
         groups = []
@@ -1470,7 +1471,7 @@ class SmartJoinGUI:
         self.stat_failed.config(text="失败: 0")
         
         self.log("=" * 60, "INFO")
-        self.log(f"🚀 开始加群！使用 {len(self.selected_accounts)} 个账号（并发）", "INFO")
+        self.log(f"🚀 开始加群！使用 {len(self.selected_broadcast_accounts)} 个账号（并发）", "INFO")
         self.log("=" * 60, "INFO")
         
         # 加载群列表
@@ -1488,7 +1489,7 @@ class SmartJoinGUI:
             return
         
         self.log(f"📋 待加入群数: {len(groups)}", "INFO")
-        self.log(f"🔀 并发模式: {len(self.selected_accounts)} 个账号同时工作", "INFO")
+        self.log(f"🔀 并发模式: {len(self.selected_broadcast_accounts)} 个账号同时工作", "INFO")
         
         # 不重复模式：使用共享群队列
         if not Config.ALLOW_DUPLICATE:
@@ -1945,6 +1946,44 @@ class SmartJoinGUI:
                command=self.deselect_all_broadcast_groups,
                bg="#9E9E9E", fg="white", width=9).pack(side=LEFT, padx=2)
         
+        # 账号选择区（新增）
+        accounts_frame = LabelFrame(parent_container, text="👥 选择账号", 
+                                   font=self.font_menu, padx=10, pady=10)
+        accounts_frame.pack(fill=X, padx=10, pady=5)
+        
+        # 创建账号列表Treeview
+        columns = ('选择', '手机号', '状态')
+        self.broadcast_accounts_tree = ttk.Treeview(accounts_frame, columns=columns, 
+                                                   show='headings', height=4)
+        
+        self.broadcast_accounts_tree.column('选择', width=50, anchor=CENTER)
+        self.broadcast_accounts_tree.column('手机号', width=130, anchor=CENTER)
+        self.broadcast_accounts_tree.column('状态', width=140, anchor=CENTER)
+        
+        for col in columns:
+            self.broadcast_accounts_tree.heading(col, text=col)
+        
+        self.broadcast_accounts_tree.pack(fill=X, padx=5, pady=5)
+        
+        # 双击切换选择
+        self.broadcast_accounts_tree.bind('<Double-1>', self.toggle_broadcast_account_selection)
+        
+        # 账号操作按钮
+        accounts_btn_frame = Frame(parent_container)
+        accounts_btn_frame.pack(fill=X, padx=10, pady=5)
+        
+        Button(accounts_btn_frame, text="🔄 刷新账号列表", font=("Arial", 10, "bold"),
+               command=self.refresh_broadcast_accounts,
+               bg="#2196F3", fg="white", width=18).pack(side=LEFT, padx=2)
+        
+        Button(accounts_btn_frame, text="✅ 全选", font=("Arial", 10, "bold"),
+               command=self.select_all_broadcast_accounts,
+               bg="#FF9800", fg="white", width=8).pack(side=LEFT, padx=2)
+        
+        Button(accounts_btn_frame, text="❌ 全不选", font=("Arial", 10, "bold"),
+               command=self.deselect_all_broadcast_accounts,
+               bg="#9E9E9E", fg="white", width=9).pack(side=LEFT, padx=2)
+        
         # 发送配置
         config_frame = LabelFrame(parent_container, text="⚙️ 发送配置", 
                                  font=self.font_menu, padx=10, pady=10)
@@ -2022,7 +2061,7 @@ class SmartJoinGUI:
             return
         
         # 检查选中的账号
-        if not self.selected_accounts:
+        if not self.selected_broadcast_accounts:
             messagebox.showerror("错误", "请先选择要使用的账号！")
             return
         
@@ -2043,7 +2082,7 @@ class SmartJoinGUI:
             'message': message[:100],  # 只保存前100字符
             'image': self.broadcast_image_path.get() if self.broadcast_image_path.get() else None,
             'target_mode': target_mode,
-            'accounts': self.selected_accounts.copy(),
+            'accounts': self.selected_broadcast_accounts.copy(),
             'total_groups': 0,
             'sent': 0,
             'success': 0,
@@ -2112,15 +2151,15 @@ class SmartJoinGUI:
     async def broadcast_to_groups_new(self, target_groups, message):
         """新版群发（支持多账号并发）"""
         # 检查是否有多个账号
-        if len(self.selected_accounts) > 1:
-            self.log(f"🔀 多账号并发模式: {len(self.selected_accounts)} 个账号", "INFO")
+        if len(self.selected_broadcast_accounts) > 1:
+            self.log(f"🔀 多账号并发模式: {len(self.selected_broadcast_accounts)} 个账号", "INFO")
             # 分配群组给账号
-            groups_per_account = len(target_groups) // len(self.selected_accounts)
+            groups_per_account = len(target_groups) // len(self.selected_broadcast_accounts)
             
             tasks = []
-            for idx, session_name in enumerate(self.selected_accounts):
+            for idx, session_name in enumerate(self.selected_broadcast_accounts):
                 start_idx = idx * groups_per_account
-                end_idx = start_idx + groups_per_account if idx < len(self.selected_accounts) - 1 else len(target_groups)
+                end_idx = start_idx + groups_per_account if idx < len(self.selected_broadcast_accounts) - 1 else len(target_groups)
                 account_groups = target_groups[start_idx:end_idx]
                 
                 if account_groups:
@@ -2132,7 +2171,7 @@ class SmartJoinGUI:
             await asyncio.gather(*tasks)
         else:
             # 单账号模式
-            session_name = self.selected_accounts[0]
+            session_name = self.selected_broadcast_accounts[0]
             self.log(f"👤 单账号模式: {session_name}", "INFO")
             await self.broadcast_worker(session_name, target_groups, message, 0)
     
@@ -2175,7 +2214,7 @@ class SmartJoinGUI:
                     self.broadcast_stat_failed.config(text=f"失败: {self.broadcast_total_failed}")
                 
                 self.broadcast_total_sent += 1
-                self.broadcast_stat_sent.config(text=f"已发送: {self.broadcast_total_sent}/{len(target_groups) * len(self.selected_accounts)}")
+                self.broadcast_stat_sent.config(text=f"已发送: {self.broadcast_total_sent}/{len(target_groups) * len(self.selected_broadcast_accounts)}")
                 
                 # 间隔
                 if idx < len(target_groups):
@@ -2338,7 +2377,7 @@ class SmartJoinGUI:
         if not self.selected_accounts:
             return False
         
-        session_name = self.selected_accounts[0]
+        session_name = self.selected_broadcast_accounts[0]
         session_path = os.path.join(Config.SESSIONS_DIR, session_name)
         client = TelegramClient(session_path, Config.API_ID, Config.API_HASH)
         
@@ -2402,7 +2441,7 @@ class SmartJoinGUI:
         self.broadcast_groups = []
         
         # 使用第一个选中的账号
-        session_name = self.selected_accounts[0]
+        session_name = self.selected_broadcast_accounts[0]
         session_path = os.path.join(Config.SESSIONS_DIR, session_name)
         client = TelegramClient(session_path, Config.API_ID, Config.API_HASH)
         
@@ -2410,14 +2449,17 @@ class SmartJoinGUI:
             await client.connect()
             
             if not await client.is_user_authorized():
-                self.log(f"❌ [{session_name}] 未授权", "ERROR")
+                self.broadcast_log(f"❌ [{session_name}] 未授权", "ERROR")
                 return
             
-            self.log(f"🔍 [{session_name}] 正在查询群组列表...", "INFO")
+            self.broadcast_log(f"🔍 [{session_name}] 正在查询群组列表...", "INFO")
             all_dialogs = await client.get_dialogs()
             
-            # 过滤出群组和频道
+            # 过滤出群组和频道（包括私有群）
             idx = 0
+            total_dialogs = len(all_dialogs)
+            self.broadcast_log(f"📊 [{session_name}] 总对话数: {total_dialogs}", "INFO")
+            
             for d in all_dialogs:
                 if d.is_group or d.is_channel:
                     idx += 1
@@ -2438,10 +2480,10 @@ class SmartJoinGUI:
                     values = ('☐', str(idx), group_name, group_type)
                     self.broadcast_groups_tree.insert('', END, values=values, tags=(f'group_{idx}',))
             
-            self.log(f"✅ 已加载 {idx} 个群组/频道", "SUCCESS")
+            self.broadcast_log(f"✅ 已加载 {idx} 个群组/频道", "SUCCESS")
         
         except Exception as e:
-            self.log(f"❌ 加载失败: {e}", "ERROR")
+            self.broadcast_log(f"❌ 加载失败: {e}", "ERROR")
         
         finally:
             await client.disconnect()
@@ -2486,6 +2528,62 @@ class SmartJoinGUI:
             values = list(self.broadcast_groups_tree.item(item)['values'])
             values[0] = '☐'
             self.broadcast_groups_tree.item(item, values=values)
+        self.broadcast_log("✅ 已取消全选", "INFO")
+    
+    def refresh_broadcast_accounts(self):
+        """刷新账号列表（群发用）"""
+        # 清空列表
+        for item in self.broadcast_accounts_tree.get_children():
+            self.broadcast_accounts_tree.delete(item)
+        
+        self.selected_broadcast_accounts = []
+        
+        # 从主界面的accounts复制
+        for account in self.accounts:
+            check_mark = '☐'
+            values = (check_mark, account.phone, account.status)
+            self.broadcast_accounts_tree.insert('', END, values=values, tags=(account.session_name,))
+        
+        self.broadcast_log(f"✅ 已刷新账号列表，共 {len(self.accounts)} 个账号", "INFO")
+    
+    def toggle_broadcast_account_selection(self, event):
+        """切换账号选择状态"""
+        item = self.broadcast_accounts_tree.identify_row(event.y)
+        if not item:
+            return
+        
+        session_name = self.broadcast_accounts_tree.item(item)['tags'][0]
+        current_values = list(self.broadcast_accounts_tree.item(item)['values'])
+        
+        if current_values[0] == '☐':
+            current_values[0] = '☑'
+            if session_name not in self.selected_broadcast_accounts:
+                self.selected_broadcast_accounts.append(session_name)
+        else:
+            current_values[0] = '☐'
+            if session_name in self.selected_broadcast_accounts:
+                self.selected_broadcast_accounts.remove(session_name)
+        
+        self.broadcast_accounts_tree.item(item, values=current_values)
+    
+    def select_all_broadcast_accounts(self):
+        """全选账号"""
+        self.selected_broadcast_accounts = []
+        for item in self.broadcast_accounts_tree.get_children():
+            session_name = self.broadcast_accounts_tree.item(item)['tags'][0]
+            values = list(self.broadcast_accounts_tree.item(item)['values'])
+            values[0] = '☑'
+            self.broadcast_accounts_tree.item(item, values=values)
+            self.selected_broadcast_accounts.append(session_name)
+        self.broadcast_log(f"✅ 已全选 {len(self.selected_broadcast_accounts)} 个账号", "INFO")
+    
+    def deselect_all_broadcast_accounts(self):
+        """全不选账号"""
+        self.selected_broadcast_accounts = []
+        for item in self.broadcast_accounts_tree.get_children():
+            values = list(self.broadcast_accounts_tree.item(item)['values'])
+            values[0] = '☐'
+            self.broadcast_accounts_tree.item(item, values=values)
         self.broadcast_log("✅ 已取消全选", "INFO")
     
     def broadcast_log(self, message: str, level: str = "INFO"):
