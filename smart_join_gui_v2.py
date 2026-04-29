@@ -584,6 +584,11 @@ class SmartJoinGUI:
         
         await asyncio.gather(*[check_with_limit(task) for task in tasks])
         
+        # 统计
+        total = len(self.accounts)
+        authorized = 0
+        unauthorized = 0
+        
         # 更新表格
         for item in self.account_tree.get_children():
             session_name = self.account_tree.item(item)['tags'][0]
@@ -597,12 +602,15 @@ class SmartJoinGUI:
                 values[5] = f"{account.joined_count}/{account.daily_limit}"  # 已加群数
                 self.account_tree.item(item, values=values)
                 
-                self.log(f"[{values[0]}] {account.phone} ({account.name}) - {account.status}", 
-                        "SUCCESS" if account.is_authorized else "WARNING")
+                # 统计
+                if account.is_authorized:
+                    authorized += 1
+                else:
+                    unauthorized += 1
         
         # 更新统计
         self.update_stats()
-        self.log(f"✅ 检查完成！", "SUCCESS")
+        self.log(f"✅ 检查完成！正常: {authorized}, 失效: {unauthorized}, 总计: {total}", "SUCCESS")
     
     def toggle_account_selection(self, event):
         """切换账号选择状态"""
