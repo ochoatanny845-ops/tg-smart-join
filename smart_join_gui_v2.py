@@ -162,8 +162,35 @@ class SmartJoinGUI:
     def setup_ui(self):
         """创建UI"""
         
+        # 创建Notebook（标签页）
+        notebook = ttk.Notebook(self.root)
+        notebook.pack(fill=BOTH, expand=True, padx=5, pady=5)
+        
+        # 标签页1: 主界面
+        main_frame = Frame(notebook)
+        notebook.add(main_frame, text="🏠 主界面")
+        self.setup_main_tab(main_frame)
+        
+        # 标签页2: 群链接管理
+        groups_frame = Frame(notebook)
+        notebook.add(groups_frame, text="📋 群链接管理")
+        self.setup_groups_tab(groups_frame)
+        
+        # 标签页3: 配置
+        config_frame = Frame(notebook)
+        notebook.add(config_frame, text="⚙️ 配置")
+        self.setup_config_tab(config_frame)
+        
+        # 标签页4: 统计
+        stats_frame = Frame(notebook)
+        notebook.add(stats_frame, text="📊 统计")
+        self.setup_stats_tab(stats_frame)
+    
+    def setup_main_tab(self, parent):
+        """主界面标签页"""
+        
         # 顶部：账号列表
-        account_frame = LabelFrame(self.root, text="📱 账号列表", 
+        account_frame = LabelFrame(parent, text="📱 账号列表", 
                                    font=self.font_menu, padx=10, pady=10)
         account_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
         
@@ -196,7 +223,7 @@ class SmartJoinGUI:
         self.account_tree.bind('<Double-1>', self.toggle_account_selection)
         
         # 账号操作按钮
-        account_btn_frame = Frame(self.root)
+        account_btn_frame = Frame(parent)
         account_btn_frame.pack(fill=X, padx=10, pady=5)
         
         Button(account_btn_frame, text="🔄 刷新列表", font=self.font_button, 
@@ -216,7 +243,7 @@ class SmartJoinGUI:
                bg="#9E9E9E", fg="white", width=10).pack(side=LEFT, padx=5)
         
         # 统计信息
-        stats_frame = LabelFrame(self.root, text="📊 统计信息", 
+        stats_frame = LabelFrame(parent, text="📊 统计信息", 
                                 font=self.font_menu, padx=10, pady=5)
         stats_frame.pack(fill=X, padx=10, pady=5)
         
@@ -233,7 +260,7 @@ class SmartJoinGUI:
         self.stat_groups.grid(row=0, column=2, padx=10)
         
         # 控制按钮
-        control_frame = Frame(self.root)
+        control_frame = Frame(parent)
         control_frame.pack(fill=X, padx=10, pady=5)
         
         self.start_button = Button(control_frame, text="▶ 开始加群", 
@@ -250,14 +277,14 @@ class SmartJoinGUI:
         self.stop_button.pack(side=LEFT, padx=5)
         
         # 进度条
-        self.progress = ttk.Progressbar(self.root, mode='determinate')
+        self.progress = ttk.Progressbar(parent, mode='determinate')
         self.progress.pack(fill=X, padx=10, pady=5)
         
-        self.progress_label = Label(self.root, text="就绪", font=self.font_label)
+        self.progress_label = Label(parent, text="就绪", font=self.font_label)
         self.progress_label.pack()
         
         # 日志
-        log_frame = LabelFrame(self.root, text="📜 运行日志", 
+        log_frame = LabelFrame(parent, text="📜 运行日志", 
                               font=self.font_menu, padx=5, pady=5)
         log_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
         
@@ -270,6 +297,173 @@ class SmartJoinGUI:
         self.log_text.tag_config("SUCCESS", foreground="green")
         self.log_text.tag_config("WARNING", foreground="orange")
         self.log_text.tag_config("ERROR", foreground="red")
+    
+    def setup_groups_tab(self, parent):
+        """群链接管理标签页"""
+        
+        # 工具栏
+        toolbar = Frame(parent)
+        toolbar.pack(fill=X, padx=10, pady=5)
+        
+        Button(toolbar, text="📂 导入链接", font=self.font_button,
+               command=self.import_groups, bg="#4CAF50", fg="white", width=12).pack(side=LEFT, padx=5)
+        
+        Button(toolbar, text="💾 保存", font=self.font_button,
+               command=self.save_groups, bg="#2196F3", fg="white", width=10).pack(side=LEFT, padx=5)
+        
+        Button(toolbar, text="🗑️ 清空", font=self.font_button,
+               command=self.clear_groups, bg="#f44336", fg="white", width=10).pack(side=LEFT, padx=5)
+        
+        # 群链接文本框
+        groups_frame = LabelFrame(parent, text="📋 群链接列表 (每行一个)", 
+                                 font=self.font_menu, padx=5, pady=5)
+        groups_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
+        
+        self.groups_text = scrolledtext.ScrolledText(groups_frame, font=self.font_log, wrap=WORD)
+        self.groups_text.pack(fill=BOTH, expand=True)
+        
+        # 加载群链接
+        self.load_groups_text()
+    
+    def setup_config_tab(self, parent):
+        """配置标签页"""
+        
+        config_frame = LabelFrame(parent, text="⚙️ 加群配置", 
+                                 font=self.font_menu, padx=10, pady=10)
+        config_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
+        
+        # 间隔设置
+        Label(config_frame, text="最小间隔(秒):", font=self.font_label).grid(row=0, column=0, sticky=W, pady=5)
+        self.interval_min_var = IntVar(value=Config.INTERVAL_MIN)
+        Entry(config_frame, textvariable=self.interval_min_var, font=self.font_label, width=10).grid(row=0, column=1, pady=5)
+        
+        Label(config_frame, text="最大间隔(秒):", font=self.font_label).grid(row=1, column=0, sticky=W, pady=5)
+        self.interval_max_var = IntVar(value=Config.INTERVAL_MAX)
+        Entry(config_frame, textvariable=self.interval_max_var, font=self.font_label, width=10).grid(row=1, column=1, pady=5)
+        
+        Label(config_frame, text="批次大小:", font=self.font_label).grid(row=2, column=0, sticky=W, pady=5)
+        self.batch_size_var = IntVar(value=Config.BATCH_SIZE)
+        Entry(config_frame, textvariable=self.batch_size_var, font=self.font_label, width=10).grid(row=2, column=1, pady=5)
+        
+        Label(config_frame, text="批次休息最小(秒):", font=self.font_label).grid(row=3, column=0, sticky=W, pady=5)
+        self.batch_rest_min_var = IntVar(value=Config.BATCH_REST_MIN)
+        Entry(config_frame, textvariable=self.batch_rest_min_var, font=self.font_label, width=10).grid(row=3, column=1, pady=5)
+        
+        Label(config_frame, text="批次休息最大(秒):", font=self.font_label).grid(row=4, column=0, sticky=W, pady=5)
+        self.batch_rest_max_var = IntVar(value=Config.BATCH_REST_MAX)
+        Entry(config_frame, textvariable=self.batch_rest_max_var, font=self.font_label, width=10).grid(row=4, column=1, pady=5)
+        
+        Label(config_frame, text="每日限额:", font=self.font_label).grid(row=5, column=0, sticky=W, pady=5)
+        self.daily_limit_var = IntVar(value=Config.DAILY_LIMIT)
+        Entry(config_frame, textvariable=self.daily_limit_var, font=self.font_label, width=10).grid(row=5, column=1, pady=5)
+        
+        # 保存按钮
+        Button(config_frame, text="💾 保存配置", font=self.font_button,
+               command=self.save_config, bg="#4CAF50", fg="white", width=15).grid(row=6, column=0, columnspan=2, pady=20)
+    
+    def setup_stats_tab(self, parent):
+        """统计标签页"""
+        
+        stats_frame = LabelFrame(parent, text="📊 加群统计", 
+                                font=self.font_menu, padx=10, pady=10)
+        stats_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
+        
+        # 统计文本
+        self.stats_text = scrolledtext.ScrolledText(stats_frame, font=self.font_log, wrap=WORD)
+        self.stats_text.pack(fill=BOTH, expand=True)
+        
+        # 刷新按钮
+        Button(stats_frame, text="🔄 刷新统计", font=self.font_button,
+               command=self.refresh_stats, bg="#2196F3", fg="white", width=15).pack(pady=10)
+        
+        # 加载统计
+        self.refresh_stats()
+    
+    def load_groups_text(self):
+        """加载群链接到文本框"""
+        if os.path.exists(Config.GROUPS_FILE):
+            with open(Config.GROUPS_FILE, 'r', encoding='utf-8') as f:
+                self.groups_text.delete('1.0', END)
+                self.groups_text.insert('1.0', f.read())
+    
+    def import_groups(self):
+        """导入群链接"""
+        file = filedialog.askopenfilename(
+            title="选择群链接文件",
+            filetypes=[("文本文件", "*.txt"), ("所有文件", "*.*")]
+        )
+        
+        if file:
+            try:
+                with open(file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                self.groups_text.delete('1.0', END)
+                self.groups_text.insert('1.0', content)
+                self.log("✅ 导入群链接成功", "SUCCESS")
+            except Exception as e:
+                self.log(f"❌ 导入失败: {e}", "ERROR")
+    
+    def save_groups(self):
+        """保存群链接"""
+        content = self.groups_text.get('1.0', END)
+        try:
+            with open(Config.GROUPS_FILE, 'w', encoding='utf-8') as f:
+                f.write(content)
+            self.log("✅ 保存成功", "SUCCESS")
+            self.update_stats()
+        except Exception as e:
+            self.log(f"❌ 保存失败: {e}", "ERROR")
+    
+    def clear_groups(self):
+        """清空群链接"""
+        if messagebox.askyesno("确认", "确定要清空所有群链接吗？"):
+            self.groups_text.delete('1.0', END)
+            self.log("⚠️ 群链接已清空（未保存）", "WARNING")
+    
+    def save_config(self):
+        """保存配置"""
+        Config.INTERVAL_MIN = self.interval_min_var.get()
+        Config.INTERVAL_MAX = self.interval_max_var.get()
+        Config.BATCH_SIZE = self.batch_size_var.get()
+        Config.BATCH_REST_MIN = self.batch_rest_min_var.get()
+        Config.BATCH_REST_MAX = self.batch_rest_max_var.get()
+        Config.DAILY_LIMIT = self.daily_limit_var.get()
+        
+        self.log("✅ 配置已保存", "SUCCESS")
+        messagebox.showinfo("成功", "配置已保存！")
+    
+    def refresh_stats(self):
+        """刷新统计"""
+        self.stats_text.delete('1.0', END)
+        
+        # 加载joined.json
+        joined = DataManager.load_json(Config.JOINED_FILE)
+        
+        stats_text = "=" * 60 + "\n"
+        stats_text += "📊 加群统计报告\n"
+        stats_text += "=" * 60 + "\n\n"
+        
+        if not joined:
+            stats_text += "暂无加群记录\n"
+        else:
+            total_joined = sum(len(groups) for groups in joined.values())
+            stats_text += f"📈 总计: {len(joined)} 个账号，已加入 {total_joined} 个群\n\n"
+            
+            for session_name, groups in joined.items():
+                # 获取账号信息
+                account = next((acc for acc in self.accounts if acc.session_name == session_name), None)
+                if account:
+                    stats_text += f"👤 {account.phone} ({account.name})\n"
+                else:
+                    stats_text += f"👤 {session_name}\n"
+                
+                stats_text += f"   已加入群数: {len(groups)}\n"
+                stats_text += f"   最近5个群:\n"
+                for group in groups[-5:]:
+                    stats_text += f"      - {group}\n"
+                stats_text += "\n"
+        
+        self.stats_text.insert('1.0', stats_text)
     
     async def load_accounts(self):
         """加载所有账号信息"""
