@@ -233,8 +233,12 @@ class SmartJoinGUI:
         account_btn_frame.pack(fill=X, padx=10, pady=5)
         
         Button(account_btn_frame, text="🔄 刷新列表", font=self.font_button, 
-               command=lambda: asyncio.run(self.load_accounts()), 
+               command=self.refresh_accounts_quick, 
                bg="#2196F3", fg="white", width=12).pack(side=LEFT, padx=5)
+        
+        Button(account_btn_frame, text="🔍 检查状态", font=self.font_button, 
+               command=lambda: asyncio.run(self.check_accounts_status()), 
+               bg="#9C27B0", fg="white", width=12).pack(side=LEFT, padx=5)
         
         Button(account_btn_frame, text="➕ 导入Session", font=self.font_button, 
                command=self.import_session, 
@@ -491,8 +495,102 @@ class SmartJoinGUI:
         
         self.stats_text.insert('1.0', stats_text)
     
+    def refresh_accounts_quick(self):
+        """快速刷新账号列表（不检查状态，只刷新统计）"""
+        self.log("🔄 快速刷新账号列表...", "INFO")
+        
+        # 重新扫描Session文件
+        if not os.path.exists(Config.SESSIONS_DIR):
+            self.log("⚠️  sessions目录为空！", "WARNING")
+            return
+        
+        session_files = [f.replace('.session', '') 
+                        for f in os.listdir(Config.SESSIONS_DIR) 
+                        if f.endswith('.session')]
+        
+        # 清空表格
+        for item in self.account_tree.get_children():
+            self.account_tree.delete(item)
+        
+        # 更新accounts列表
+        old_accounts = {acc.session_name: acc for acc in self.accounts}
+        self.accounts = []
+        
+        # 添加到表格（使用旧状态或默认状态）
+        for idx, session_name in enumerate(session_files, start=1):
+            # 如果之前有这个账号，使用旧数据
+            if session_name in old_accounts:
+                account = old_accounts[session_name]
+                # 更新加群数
+                account.joined_count = DataManager.get_joined_count(session_name)
+            else:
+                # 新账号，使用默认值
+                account = AccountInfo(session_name)
+                account.phone = '未知'
+                account.name = '未检查'
+                account.status = '⚪ 未检查'
+                account.joined_count = DataManager.get_joined_count(session_name)
+            
+            self.accounts.append(account)
+            
+            values = (
+                str(idx),
+                '☐',
+                account.phone,
+                account.name,
+                account.status,
+                f"{account.joined_count}/{account.daily_limit}",
+                account.session_name
+            )
+            self.account_tree.insert('', END, values=values, tags=(account.session_name,))
+        
+        # 更新统计
+        self.update_stats()
+        self.log(f"✅ 刷新完成！共 {len(self.accounts)} 个账号", "SUCCESS")
+    
+    async def check_accounts_status(self):
+        """检查所有账号状态（并发10线程）"""
+        self.log("🔍 检查账号状态（10线程并发）...", "INFO")
+        
+        if not self.accounts:
+            self.log("⚠️  没有账号需要检查！", "WARNING")
+            return
+        
+        # 并发检查
+        tasks = []
+        for account in self.accounts:
+            tasks.append(account.load_info())
+        
+        semaphore = asyncio.Semaphore(10)
+        
+        async def check_with_limit(task):
+            async with semaphore:
+                await task
+        
+        await asyncio.gather(*[check_with_limit(task) for task in tasks])
+        
+        # 更新表格
+        for item in self.account_tree.get_children():
+            session_name = self.account_tree.item(item)['tags'][0]
+            account = next((acc for acc in self.accounts if acc.session_name == session_name), None)
+            
+            if account:
+                values = list(self.account_tree.item(item)['values'])
+                values[2] = account.phone      # 手机号
+                values[3] = account.name       # 名字
+                values[4] = account.status     # 状态
+                values[5] = f"{account.joined_count}/{account.daily_limit}"  # 已加群数
+                self.account_tree.item(item, values=values)
+                
+                self.log(f"[{values[0]}] {account.phone} ({account.name}) - {account.status}", 
+                        "SUCCESS" if account.is_authorized else "WARNING")
+        
+        # 更新统计
+        self.update_stats()
+        self.log(f"✅ 检查完成！", "SUCCESS")
+    
     async def load_accounts(self):
-        """加载所有账号信息（并发检查）"""
+        """加载所有账号信息（并发检查）- 启动时调用"""
         self.log("🔍 扫描Session文件...", "INFO")
         
         # 清空表格
@@ -627,8 +725,8 @@ class SmartJoinGUI:
         
         self.log(f"✅ 已删除 {deleted} 个失效账号", "SUCCESS")
         
-        # 重新加载
-        asyncio.run(self.load_accounts())
+        # 快速刷新
+        self.refresh_accounts_quick()
     
     def update_stats(self):
         """更新统计信息"""
@@ -664,8 +762,8 @@ class SmartJoinGUI:
                 except Exception as e:
                     self.log(f"❌ 导入失败: {filename} - {e}", "ERROR")
             
-            # 重新加载
-            asyncio.run(self.load_accounts())
+            # 快速刷新列表
+            self.refresh_accounts_quick()
     
     def start_join(self):
         """开始加群"""
