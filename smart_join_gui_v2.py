@@ -154,7 +154,8 @@ class AccountInfo:
         self.phone = self.extract_phone_from_session(self.session_name)
         self.name = ''
         self.status = '未知'
-        self.joined_count = 0
+        self.joined_count = 0  # joined.json中的数量
+        self.real_group_count = 0  # 真实群数量
         self.daily_limit = Config.DAILY_LIMIT
         self.is_authorized = False
     
@@ -204,22 +205,27 @@ class AccountInfo:
                     # 尝试获取对话列表（被冻结的账号会报错）
                     dialogs = await client.get_dialogs(limit=1)
                     
-                    # 检查是否有限制（通过尝试发送消息给自己）
-                    # 如果账号被限制，某些操作会抛出特定错误
+                    # 统计真实群数量（只统计群组和超级群，不包括私聊和频道）
+                    all_dialogs = await client.get_dialogs()
+                    self.real_group_count = sum(1 for d in all_dialogs if d.is_group or d.is_channel)
+                    
                     self.status = '✅ 正常'
                     self.is_authorized = True
                     
                 except errors.AuthKeyUnregisteredError:
                     self.status = '❌ 账号已注销'
                     self.is_authorized = False
+                    self.real_group_count = 0
                     
                 except errors.UserDeactivatedError:
                     self.status = '❌ 账号已被停用'
                     self.is_authorized = False
+                    self.real_group_count = 0
                     
                 except errors.UserDeactivatedBanError:
                     self.status = '❌ 账号已被封禁'
                     self.is_authorized = False
+                    self.real_group_count = 0
                     
                 except Exception as check_error:
                     # 如果是冻结相关的错误
@@ -227,6 +233,7 @@ class AccountInfo:
                     if 'frozen' in error_msg or 'banned' in error_msg or 'deactivated' in error_msg:
                         self.status = '⚠️ 账号受限/冻结'
                         self.is_authorized = False
+                        self.real_group_count = 0
                     else:
                         # 其他错误，可能是网络问题，先标记为正常
                         self.status = '✅ 正常'
@@ -338,17 +345,18 @@ class SmartJoinGUI:
         account_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
         
         # 账号表格
-        columns = ('序号', '选择', '手机号', '名字', '状态', '已加群数')
+        columns = ('序号', '选择', '手机号', '名字', '状态', '已加群数', '实际群数')
         self.account_tree = ttk.Treeview(account_frame, columns=columns, 
                                         show='headings', height=8)
         
         # 列宽
         self.account_tree.column('序号', width=50, anchor=CENTER)
         self.account_tree.column('选择', width=50, anchor=CENTER)
-        self.account_tree.column('手机号', width=150, anchor=CENTER)
-        self.account_tree.column('名字', width=120, anchor=CENTER)
-        self.account_tree.column('状态', width=150, anchor=CENTER)
-        self.account_tree.column('已加群数', width=120, anchor=CENTER)
+        self.account_tree.column('手机号', width=130, anchor=CENTER)
+        self.account_tree.column('名字', width=100, anchor=CENTER)
+        self.account_tree.column('状态', width=140, anchor=CENTER)
+        self.account_tree.column('已加群数', width=100, anchor=CENTER)
+        self.account_tree.column('实际群数', width=100, anchor=CENTER)
         
         # 列标题
         for col in columns:
@@ -735,7 +743,8 @@ class SmartJoinGUI:
                 account.phone,
                 account.name,
                 account.status,
-                f"{account.joined_count}/{account.daily_limit}"
+                f"{account.joined_count}/{account.daily_limit}",
+                str(account.real_group_count) if account.real_group_count > 0 else '-'
             )
             # 添加前缀确保tags是字符串（快速刷新）
             self.account_tree.insert('', END, values=values, tags=(f'session_{account.session_name}',))
@@ -793,7 +802,8 @@ class SmartJoinGUI:
                 account.phone,
                 account.name,
                 account.status,
-                f"{account.joined_count}/{account.daily_limit}"
+                f"{account.joined_count}/{account.daily_limit}",
+                str(account.real_group_count)
             )
             # 添加前缀确保tags是字符串（检查状态后）
             self.account_tree.insert('', END, values=values, tags=(f'session_{account.session_name}',))
