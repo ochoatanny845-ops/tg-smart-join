@@ -2454,6 +2454,25 @@ class SmartJoinGUI:
         
         # 使用第一个选中的账号
         session_name = self.selected_broadcast_accounts[0]
+        
+        # 保护性检查：如果是int，说明选择逻辑有问题，尝试从tags获取
+        if isinstance(session_name, int):
+            self.broadcast_log(f"⚠️ 检测到索引错误，尝试修复...", "WARNING")
+            # 尝试从tree的第session_name项获取真实的session_name
+            try:
+                items = list(self.broadcast_accounts_tree.get_children())
+                if session_name < len(items):
+                    session_name = self.broadcast_accounts_tree.item(items[session_name])['tags'][0]
+                    self.broadcast_log(f"✅ 已修复，使用账号: {session_name}", "INFO")
+                else:
+                    self.broadcast_log(f"❌ 修复失败：索引超出范围", "ERROR")
+                    messagebox.showerror("错误", "账号选择错误，请重新刷新账号列表并选择！")
+                    return
+            except Exception as e:
+                self.broadcast_log(f"❌ 修复失败：{e}", "ERROR")
+                messagebox.showerror("错误", f"账号选择错误：{e}\n请重新刷新账号列表并选择！")
+                return
+        
         self.broadcast_log(f"📱 使用账号: {session_name}", "INFO")
         
         session_path = os.path.join(Config.SESSIONS_DIR, session_name)
