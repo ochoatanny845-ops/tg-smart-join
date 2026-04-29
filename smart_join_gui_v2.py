@@ -577,7 +577,8 @@ class SmartJoinGUI:
                 account.status,
                 f"{account.joined_count}/{account.daily_limit}"
             )
-            self.account_tree.insert('', END, values=values, tags=(account.session_name,))
+            # 添加前缀确保tags是字符串（快速刷新）
+            self.account_tree.insert('', END, values=values, tags=(f'session_{account.session_name}',))
         
         # 更新统计
         self.update_stats()
@@ -628,7 +629,8 @@ class SmartJoinGUI:
                 account.status,
                 f"{account.joined_count}/{account.daily_limit}"
             )
-            self.account_tree.insert('', END, values=values, tags=(account.session_name,))
+            # 添加前缀确保tags是字符串（检查状态后）
+            self.account_tree.insert('', END, values=values, tags=(f'session_{account.session_name}',))
             
             # 统计
             if account.is_authorized:
@@ -645,7 +647,8 @@ class SmartJoinGUI:
     def toggle_account_selection(self, event):
         """切换账号选择状态"""
         item = self.account_tree.selection()[0]
-        session_name = self.account_tree.item(item)['tags'][0]
+        tag_with_prefix = self.account_tree.item(item)['tags'][0]
+        session_name = tag_with_prefix.replace('session_', '')  # 去掉前缀
         
         # 切换选中状态
         current_values = list(self.account_tree.item(item)['values'])
@@ -668,7 +671,8 @@ class SmartJoinGUI:
             values = list(self.account_tree.item(item)['values'])
             values[1] = '☑'  # 序号在0，选择框在1
             self.account_tree.item(item, values=values)
-            session_name = self.account_tree.item(item)['tags'][0]
+            tag_with_prefix = self.account_tree.item(item)['tags'][0]
+            session_name = tag_with_prefix.replace('session_', '')  # 去掉前缀
             self.selected_accounts.append(session_name)
         self.update_stats()
     
