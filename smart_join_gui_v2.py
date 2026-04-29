@@ -513,9 +513,16 @@ class SmartJoinGUI:
         Config.DAILY_LIMIT = self.daily_limit_var.get()
         Config.ALLOW_DUPLICATE = self.allow_duplicate_var.get()
         
+        # 更新所有账号的daily_limit
+        for account in self.accounts:
+            account.daily_limit = Config.DAILY_LIMIT
+        
+        # 刷新账号列表显示
+        self.refresh_accounts_quick()
+        
         mode = "重复加群" if Config.ALLOW_DUPLICATE else "不重复加群"
-        self.log(f"✅ 配置已保存（模式: {mode}）", "SUCCESS")
-        messagebox.showinfo("成功", f"配置已保存！\n模式: {mode}")
+        self.log(f"✅ 配置已保存（模式: {mode}，每日限额: {Config.DAILY_LIMIT}）", "SUCCESS")
+        messagebox.showinfo("成功", f"配置已保存！\n模式: {mode}\n每日限额: {Config.DAILY_LIMIT}")
     
     def refresh_stats(self):
         """刷新统计"""
