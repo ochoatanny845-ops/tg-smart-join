@@ -240,12 +240,20 @@ class AccountInfo:
                         return
                     except Exception as send_err:
                         error_msg = str(send_err).lower()
+                        
+                        # 检查是否是冻结相关错误
                         if 'frozen' in error_msg or 'deactivat' in error_msg or 'banned' in error_msg:
                             self.status = '⚠️ 账号受限/冻结'
                             self.is_authorized = False
                             self.real_group_count = 0
                             print(f"[DEBUG] {self.session_name}: 发送消息失败 - {send_err}")
                             return
+                        
+                        # 检查是否是invalid peer错误（可能是Bot或Session问题）
+                        elif 'invalid peer' in error_msg or 'peer' in error_msg:
+                            # 跳过发送消息测试，继续其他检查
+                            print(f"[DEBUG] {self.session_name}: ⚠️ 无法发送消息（可能是Bot账号或Session问题），跳过此测试")
+                        
                         else:
                             # 其他错误，可能是FloodWait，继续检查
                             print(f"[DEBUG] {self.session_name}: 发送消息出错（非冻结）- {send_err}")
